@@ -7,6 +7,7 @@ scripts/**
 !scripts/companionPatches.cjs
 !scripts/companionPatchEngine.cjs
 !scripts/official261021.cjs
+!scripts/officialWebviewRecovery.cjs
 !scripts/patchOfficialHistory.cjs
 !scripts/patchOfficialTitles.cjs
 !scripts/patchOfficialWorkflow.cjs

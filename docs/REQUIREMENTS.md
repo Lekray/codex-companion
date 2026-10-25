@@ -1,9 +1,24 @@
-# Требования Codex Companion — 0.2.7
+# Требования Codex Companion — 0.2.8
 
 Штатные вкладки Codex в текущем VS Code; Windows, официальные OpenAI
-26.1007.21434 и 26.1021.22027. Собственный чат/новые провайдеры/публикация
-не входят в проект. 0.2.6 принята Main и локально установлена 25 октября 2026.
-0.2.7 принята Main и локально установлена для 26.1021.22027; подробности — docs/HANDOFF.md.
+26.1007.21434 и 26.1021.22027. Companion 0.2.8 принят Main и локально установлен
+25 октября 2026; функции 0.2.7 сохранены. Публикации нет.
+
+## Защита панели от отказа необязательной навигации
+
+Убраны 2632 предварительных JS-запроса, все 143 CSS сохранены. Неудачная загрузка
+необязательной навигации обрабатывается её штатным локальным fallback после
+ограниченного повтора; переписка и поле ввода сохраняются. Принудительное отсутствие
+того же модуля воспроизведено в настоящем VS Code до/после исправления и из VSIX.
+Причина доставки ERR_FAILED отдельно не установлена. Синтетические данные,
+модельных сообщений 0; реальная модельная задача не использовалась для проверки.
+
+Main: 437 тестов без ошибок/пропусков; exact5/exact10 restore/reinstall/no-op,
+rollback при ошибке последней записи, 117 файлов установки сверены с VSIX.
+Modern backup — chunks-v2 с десятью оригиналами. Старые backup и принятые
+native-файлы сохранены по hash/mtime; compatibility ok, canRestore true.
+Рабочие окна не reload: пользователь выполняет один ручной reload после задач.
+Текущее состояние и evidence — docs/HANDOFF.md.
 
 ## Открытые чаты
 
@@ -58,18 +73,19 @@ LOCALAPPDATA/codex-companion/patches/26.1007.21434/drafts-v1. Auto legacy
 adoption только из проверенного old4 backup + оригинального 7a; старые
 файлы/manifest не менять.
 
-Для 26.1021 — schema 3: девять оригиналов — package.json (identity guard),
-out/extension.js и семь точных webview chunks (src-622b,
+Для 26.1021 — schema 3: десять оригиналов — package.json (identity guard),
+out/extension.js и восемь точных webview chunks (src-622b,
 initialize-app-host-services, chatgpt-conversation-page, message-bus,
-dynamic-intelligence-dropdown, composer-content, composer-scope). Metadata —
+dynamic-intelligence-dropdown, composer-content, composer-scope,
+bookmarked-thread-user-message-navigation-36a0dadf9f5d). Metadata —
 resources/patchBundleManifest-26.1021.22027.json и
 patchAttestation-26.1021.22027.json; backup —
-LOCALAPPDATA/codex-companion/patches/26.1021.22027/chunks-v1. Новый install
+LOCALAPPDATA/codex-companion/patches/26.1021.22027/chunks-v2. Новый install
 не делает legacy adoption и не трогает старый backup.
 
-Обновление с установленной 0.2.6: прежний принятый engine делает точный restore
-исходных файлов OpenAI engine 0.2.6, затем выполняется install 0.2.7; backup `chunks-v1` сохраняется.
-Неизвестные/изменённые байты автоматически не восстанавливаются.
+Обновление с 0.2.7: прежний engine выполняет точный restore девяти оригиналов,
+затем engine 0.2.8 устанавливает десять целей с новым chunks-v2. Прежний
+chunks-v1 сохраняется; неизвестные/изменённые байты автоматически не исправляются.
 
 Общие правила: известные целые стадии original/history/titles/workflow/drafts;
 источники и все цели проверены до записи; unknown/mixed/modified и invalid backup

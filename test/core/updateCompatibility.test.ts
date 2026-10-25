@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import {
   SCHEMA3_FILES,
+  SCHEMA3_FILES10,
   SCHEMA3_OFFICIAL_VERSION,
   attestationFileForVersion,
   compatibilityFilesForVersion,
@@ -22,6 +23,7 @@ import {
 
 const NEW_VERSION = SCHEMA3_OFFICIAL_VERSION;
 const OLD_VERSION = '26.1007.21434';
+const RECOVERY_FILE = 'webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js';
 const LEGACY_FILES = [
   'package.json',
   'out/extension.js',
@@ -39,7 +41,7 @@ function packageJson(version: string): string {
 
 function officialFiles(version: string): Record<string, string> {
   const files: Record<string, string> = { 'package.json': packageJson(version) };
-  for (const rel of SCHEMA3_FILES) {
+  for (const rel of SCHEMA3_FILES10) {
     if (rel !== 'package.json') files[rel] = `official bundle ${rel}`;
   }
   return files;
@@ -57,7 +59,7 @@ function attestation(
   version: string,
   files: Record<string, string>,
   schema: 1 | 2 | 3 = 3,
-  targets: readonly string[] = SCHEMA3_FILES,
+  targets: readonly string[] = SCHEMA3_FILES10,
 ): PatchAttestation {
   const hashes: Record<string, string> = {};
   for (const rel of targets) hashes[rel] = sha256(files[rel] ?? '');
@@ -77,8 +79,8 @@ function findProjectRoot(start: string): string {
 const FIXTURE_ROOT = join(
   findProjectRoot(__dirname),
   '.artifacts',
-  'update-024',
-  'installer-work',
+  'webview-recovery',
+  'integration',
   'compatibility-fixtures',
 );
 
@@ -125,16 +127,16 @@ function uiDependencies(
   };
 }
 
-test('exact nine-file schema 3 attestation for 26.1021 is compatible and read-only', async t => {
+test('exact ten-file schema 3 attestation for 26.1021 is compatible and read-only', async t => {
   const files = officialFiles(NEW_VERSION);
   const directory = await fixture(t, files);
-  const before = await Promise.all(SCHEMA3_FILES.map(file => readFile(filePath(directory, file))));
+  const before = await Promise.all(SCHEMA3_FILES10.map(file => readFile(filePath(directory, file))));
 
   const result = await inspectOfficialPatch(directory, attestation(NEW_VERSION, files));
 
   assert.deepEqual(result, { ok: true, code: 'ok', version: NEW_VERSION, issues: [] });
   assert.deepEqual(
-    await Promise.all(SCHEMA3_FILES.map(file => readFile(filePath(directory, file)))),
+    await Promise.all(SCHEMA3_FILES10.map(file => readFile(filePath(directory, file)))),
     before,
   );
 });
@@ -158,6 +160,12 @@ test('schema 3 rejects another version and any non-exact target set', async t =>
   const missingTarget = await inspectOfficialPatch(directory, { ...valid, files: missing });
   assert.equal(missingTarget.code, 'manifest');
 
+  const missingRecovery = { ...valid.files };
+  delete missingRecovery[RECOVERY_FILE];
+  const missingRecoveryTarget = await inspectOfficialPatch(directory, { ...valid, files: missingRecovery });
+  assert.equal(missingRecoveryTarget.code, 'manifest');
+  assert.ok(missingRecoveryTarget.issues.some(issue => issue.includes('bookmarked-thread-user-message-navigation')));
+
   const trailing = await inspectOfficialPatch(directory, { ...valid, files: { ...valid.files }, schema: 1 });
   assert.equal(trailing.code, 'manifest');
 });
@@ -166,7 +174,7 @@ test('schema 3 verifies every changed or missing bundle after the version matche
   const files = officialFiles(NEW_VERSION);
   const directory = await fixture(t, files);
   const expected = attestation(NEW_VERSION, files);
-  const changedFile = 'webview/assets/composer-content-8ab21f1a1982.js';
+  const changedFile = RECOVERY_FILE;
 
   await writeFile(filePath(directory, changedFile), 'tampered bundle');
   const changed = await inspectOfficialPatch(directory, expected);
@@ -194,7 +202,8 @@ test('attestation resources stay legacy by default and select the 26.1021 file e
     ...LEGACY_FILES,
     'webview/assets/app-initial-7a199c66e670.js',
   ]);
-  assert.deepEqual(compatibilityFilesForVersion(NEW_VERSION), [...SCHEMA3_FILES]);
+  assert.deepEqual(compatibilityFilesForVersion(NEW_VERSION), [...SCHEMA3_FILES10]);
+  assert.deepEqual([...SCHEMA3_FILES10], [...SCHEMA3_FILES, RECOVERY_FILE]);
   assert.deepEqual(compatibilityFilesForVersion('26.2000.1'), compatibilityFilesForVersion(OLD_VERSION));
 });
 

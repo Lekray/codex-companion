@@ -14,7 +14,14 @@ const {
 } = require('../../scripts/companionPatchEngine.cjs');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
-const FIXTURE_ROOT = path.join(REPO_ROOT, '.artifacts', 'update-024', 'installer-work', 'version-fixtures');
+const FIXTURE_ROOT = path.join(
+  REPO_ROOT,
+  '.artifacts',
+  'webview-recovery',
+  'integration',
+  'installer-work',
+  'version-fixtures',
+);
 const NEW_VERSION = '26.1099.1';
 const OTHER_VERSION = '26.1099.2';
 const FILES = [
@@ -28,12 +35,18 @@ const FILES = [
   'webview/assets/six.js',
   'webview/assets/seven.js',
 ];
+const RECOVERY_TARGET = 'webview/assets/bookmarked-thread-user-message-navigation.js';
+const FILES10 = [...FILES, RECOVERY_TARGET];
 const STAGES = ['original', 'history', 'titles', 'workflow', 'drafts'];
 const FEATURES = [
   { id: 'project-history', stage: 'history', files: ['out/extension.js', 'webview/assets/one.js'] },
   { id: 'native-tab-titles', stage: 'titles', files: ['webview/assets/two.js'] },
   { id: 'workflow-notifications', stage: 'workflow', files: ['out/extension.js'] },
   { id: 'independent-drafts', stage: 'drafts', files: ['webview/assets/seven.js'] },
+];
+const FEATURES10 = [
+  ...FEATURES,
+  { id: 'webview-recovery', stage: 'drafts', files: [RECOVERY_TARGET] },
 ];
 
 function sha256(data) {
@@ -58,9 +71,9 @@ async function newRoot() {
   return fs.mkdtemp(path.join(FIXTURE_ROOT, 'version-'));
 }
 
-function originalTexts(version) {
+function originalTexts(version, files = FILES) {
   const texts = {};
-  for (const rel of FILES) {
+  for (const rel of files) {
     texts[rel] = rel === 'package.json'
       ? JSON.stringify({ publisher: 'openai', name: 'chatgpt', version })
       : `// pristine ${rel}\n`;
@@ -73,26 +86,26 @@ function transformFor(file, text, stage) {
   return `${text}// ${stage}:${file}\n`;
 }
 
-function stageTexts(version, transform = transformFor) {
-  const originals = originalTexts(version);
+function stageTexts(version, transform = transformFor, files = FILES) {
+  const originals = originalTexts(version, files);
   const texts = { original: { ...originals } };
   for (const stage of STAGES.slice(1)) {
     texts[stage] = {};
-    for (const rel of FILES) {
+    for (const rel of files) {
       texts[stage][rel] = transform(rel, texts[STAGES[STAGES.indexOf(stage) - 1]][rel], stage);
     }
   }
   return texts;
 }
 
-function buildSpec(version, transform = transformFor) {
-  const texts = stageTexts(version, transform);
+function buildSpec(version, transform = transformFor, files = FILES, features = FEATURES) {
+  const texts = stageTexts(version, transform, files);
   return {
     SUPPORTED_VERSION: version,
-    FILES: [...FILES],
-    ORIGINAL_HASHES: Object.fromEntries(FILES.map(rel => [rel, sha256(Buffer.from(texts.original[rel]))])),
+    FILES: [...files],
+    ORIGINAL_HASHES: Object.fromEntries(files.map(rel => [rel, sha256(Buffer.from(texts.original[rel]))])),
     STAGES: [...STAGES],
-    FEATURES: FEATURES.map(feature => ({ ...feature, files: [...feature.files] })),
+    FEATURES: features.map(feature => ({ ...feature, files: [...feature.files] })),
     transformStage: transform,
     texts,
   };
@@ -156,6 +169,58 @@ async function withLocalAppData(root, fn) {
     if (previous === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previous;
   }
+}
+
+async function snapshotDirectory(directory) {
+  const snapshot = {};
+  async function walk(current) {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+      const rel = path.relative(directory, full).split(path.sep).join('/');
+      const stat = await fs.stat(full);
+      snapshot[rel] = {
+        sha256: sha256(await fs.readFile(full)),
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+      };
+    }
+  }
+  await walk(directory);
+  return snapshot;
+}
+
+async function createOldNineBackup(root, localAppData, version) {
+  const oldExt = path.join(root, 'old-nine-ext');
+  const texts = originalTexts(version);
+  for (const rel of FILES) {
+    const target = filePath(oldExt, rel);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, texts[rel]);
+  }
+  const backup = path.join(localAppData, 'codex-companion', 'patches', version, 'chunks-v1');
+  await fs.mkdir(backup, { recursive: true });
+  const files = {};
+  for (const rel of FILES) {
+    const target = filePath(backup, rel);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, texts[rel]);
+    files[rel] = sha256(Buffer.from(texts[rel]));
+  }
+  await fs.writeFile(path.join(backup, 'manifest.json'), JSON.stringify({
+    schema: 1,
+    kind: 'codex-companion-pristine-backup',
+    officialVersion: version,
+    publisher: 'openai',
+    name: 'chatgpt',
+    extensionPath: oldExt,
+    files,
+  }, null, 2));
+  return backup;
 }
 
 test('default engine keeps the accepted legacy manifest and version', () => {
@@ -229,6 +294,100 @@ test('schema 3 engine backs up and restores all nine pinned files under chunks-v
         assert.equal(sha256(await fs.readFile(filePath(extDir, rel))), manifest.stages.original[rel], rel);
       }
       assert.equal((await engine.restore({ extDir })).changed, false);
+    });
+  });
+});
+
+test('ten-file schema 3 engine uses chunks-v2, restores ten and no-ops without touching the old nine backup', async () => {
+  const root = await newRoot();
+  const spec = buildSpec(NEW_VERSION, transformFor, FILES10, FEATURES10);
+  const manifest = buildManifest(spec);
+  const extDir = await writeExt(root, spec, 'original');
+
+  await withLocalAppData(root, async localAppData => {
+    const oldBackup = await createOldNineBackup(root, localAppData, NEW_VERSION);
+    const oldSnapshot = await snapshotDirectory(oldBackup);
+    await withManifests(new Map([[NEW_VERSION, manifest]]), async () => {
+      const engine = createEngine(spec);
+      const expectedBackup = path.join(localAppData, 'codex-companion', 'patches', NEW_VERSION, 'chunks-v2');
+
+      const before = await engine.check({ extDir });
+      assert.equal(before.files.length, 10);
+      assert.equal(before.state, 'original');
+      assert.equal(before.backup.path, expectedBackup);
+      assert.equal(before.backup.status, 'missing');
+      assert.equal(before.canInstall, true);
+      assert.deepEqual(before.features.map(feature => feature.id), FEATURES10.map(feature => feature.id));
+
+      const installed = await engine.install({ extDir });
+      assert.equal(installed.state, 'drafts');
+      assert.equal(installed.changed, true);
+      assert.equal(installed.backup.status, 'valid');
+      for (const rel of FILES10) {
+        assert.equal(sha256(await fs.readFile(filePath(extDir, rel))), manifest.stages.drafts[rel], rel);
+      }
+
+      const backupManifest = JSON.parse(await fs.readFile(path.join(expectedBackup, 'manifest.json'), 'utf8'));
+      assert.deepEqual(Object.keys(backupManifest.files).sort(), [...FILES10].sort());
+      assert.deepEqual(backupManifest.files, manifest.stages.original);
+      assert.deepEqual(await snapshotDirectory(oldBackup), oldSnapshot);
+
+      const installedAgain = await engine.install({ extDir });
+      assert.equal(installedAgain.changed, false);
+      assert.equal(installedAgain.state, 'drafts');
+      assert.deepEqual(await snapshotDirectory(oldBackup), oldSnapshot);
+
+      const restored = await engine.restore({ extDir });
+      assert.equal(restored.state, 'original');
+      for (const rel of FILES10) {
+        assert.equal(sha256(await fs.readFile(filePath(extDir, rel))), manifest.stages.original[rel], rel);
+      }
+      const restoredAgain = await engine.restore({ extDir });
+      assert.equal(restoredAgain.changed, false);
+      assert.equal(restoredAgain.state, 'original');
+      assert.deepEqual(await snapshotDirectory(oldBackup), oldSnapshot);
+    });
+  });
+});
+
+test('ten-file engine rejects corrupted or omitted new target and leaves chunks-v2 backup read-only', async () => {
+  const root = await newRoot();
+  const spec = buildSpec(NEW_VERSION, transformFor, FILES10, FEATURES10);
+  const manifest = buildManifest(spec);
+  const extDir = await writeExt(root, spec, 'original');
+
+  await withLocalAppData(root, async localAppData => {
+    await withManifests(new Map([[NEW_VERSION, manifest]]), async () => {
+      const engine = createEngine(spec);
+      const installed = await engine.install({ extDir });
+      assert.equal(installed.state, 'drafts');
+      const backup = path.join(localAppData, 'codex-companion', 'patches', NEW_VERSION, 'chunks-v2');
+      const backupSnapshot = await snapshotDirectory(backup);
+      const target = filePath(extDir, RECOVERY_TARGET);
+      const installedBytes = await fs.readFile(target);
+
+      await fs.writeFile(target, 'tampered recovery target');
+      const corrupted = await engine.check({ extDir });
+      assert.equal(corrupted.state, 'incompatible');
+      assert.equal(corrupted.code, 'unknown-stage');
+      assert.equal(corrupted.canInstall, false);
+      assert.equal(corrupted.canRestore, false);
+      await assert.rejects(engine.install({ extDir }), error => error.code === 'unknown-stage');
+      await assert.rejects(engine.restore({ extDir }), error => error.code === 'unknown-stage');
+      assert.equal(await fs.readFile(target, 'utf8'), 'tampered recovery target');
+      assert.deepEqual(await snapshotDirectory(backup), backupSnapshot);
+
+      await fs.writeFile(target, installedBytes);
+      await fs.rm(target);
+      const omitted = await engine.check({ extDir });
+      assert.equal(omitted.state, 'incompatible');
+      assert.equal(omitted.code, 'missing-file');
+      assert.equal(omitted.canInstall, false);
+      assert.equal(omitted.canRestore, false);
+      await assert.rejects(engine.install({ extDir }), error => error.code === 'missing-file');
+      await assert.rejects(engine.restore({ extDir }), error => error.code === 'missing-file');
+      assert.equal(await exists(target), false);
+      assert.deepEqual(await snapshotDirectory(backup), backupSnapshot);
     });
   });
 });
@@ -309,7 +468,7 @@ function loadRealNewSpec() {
   try {
     const value = require('../../scripts/official261021.cjs');
     if (!value || typeof value.SUPPORTED_VERSION !== 'string') return null;
-    if (!Array.isArray(value.FILES) || value.FILES.length !== 9) return null;
+    if (!Array.isArray(value.FILES) || value.FILES.length !== 10) return null;
     if (!value.ORIGINAL_HASHES || typeof value.ORIGINAL_HASHES !== 'object') return null;
     return value;
   } catch {
@@ -396,7 +555,7 @@ test('public facade routes the new official version to its own pinned engine', a
       'codex-companion',
       'patches',
       spec.SUPPORTED_VERSION,
-      'chunks-v1',
+      'chunks-v2',
     ),
   );
 });

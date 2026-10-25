@@ -10,6 +10,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const recovery = require("./officialWebviewRecovery.cjs");
 
 const PUBLISHER = "openai";
 const NAME = "chatgpt";
@@ -27,6 +28,13 @@ const MODEL_SETTINGS =
   "webview/assets/use-model-settings-aafcff4b111c.js";
 const COMPOSER_CONTENT = "webview/assets/composer-content-8ab21f1a1982.js";
 const COMPOSER_SCOPE = "webview/assets/composer-scope-f0dbf0e746b6.js";
+const RECOVERY_FILE = recovery.FILE;
+
+if (recovery.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
+  throw new Error(
+    "webview recovery pins " + recovery.SUPPORTED_VERSION + ", expected " + SUPPORTED_VERSION
+  );
+}
 
 const FILES = Object.freeze([
   "package.json",
@@ -38,6 +46,7 @@ const FILES = Object.freeze([
   MODEL_SETTINGS,
   COMPOSER_CONTENT,
   COMPOSER_SCOPE,
+  RECOVERY_FILE,
 ]);
 
 const ORIGINAL_HASHES = Object.freeze({
@@ -59,6 +68,7 @@ const ORIGINAL_HASHES = Object.freeze({
     "a4fbed28d7fbc35c755690023da6eba1ca656719bd2823a95684e47cfbdd3d01",
   [COMPOSER_SCOPE]:
     "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
+  [RECOVERY_FILE]: recovery.ORIGINAL_HASH,
 });
 
 const STAGES = Object.freeze([
@@ -77,6 +87,7 @@ const FEATURES = Object.freeze([
   { id: "tab-status", stage: "workflow", files: [HOST] },
   { id: "workflow-notifications", stage: "workflow", files: [HOST] },
   { id: "independent-drafts", stage: "drafts", files: [COMPOSER_SCOPE] },
+  { id: "webview-recovery", stage: "drafts", files: [RECOVERY_FILE] },
 ]);
 
 function resourcesDir() {
@@ -701,6 +712,7 @@ function applyWorkflow(file, text) {
 
 function applyDrafts(file, text) {
   if (file === COMPOSER_SCOPE) return transformDraftsScope(text);
+  if (file === RECOVERY_FILE) return recovery.transform(text);
   return text;
 }
 
@@ -869,6 +881,7 @@ module.exports = {
   MODEL_SETTINGS,
   COMPOSER_CONTENT,
   COMPOSER_SCOPE,
+  RECOVERY_FILE,
   sha256,
   replaceOnce,
   rewriteAliases,

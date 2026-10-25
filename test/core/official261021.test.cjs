@@ -12,7 +12,7 @@ const adapter = require(ADAPTER);
 
 const INSTALLED =
   process.env.COMPANION_OFFICIAL_261021 ||
-  path.resolve(__dirname, "../../.artifacts/update-024/originals");
+  path.resolve(__dirname, "../../.artifacts/webview-recovery/integration/originals");
 
 const hasInstalled = fs.existsSync(path.join(INSTALLED, "package.json"));
 
@@ -23,8 +23,8 @@ test("SUPPORTED_VERSION and identity constants", () => {
   assert.equal(adapter.MANIFEST_SCHEMA, 3);
 });
 
-test("FILES is exactly the nine pinned originals", () => {
-  assert.equal(adapter.FILES.length, 9);
+test("FILES is exactly the ten pinned originals", () => {
+  assert.equal(adapter.FILES.length, 10);
   assert.deepEqual(adapter.FILES, [
     "package.json",
     "out/extension.js",
@@ -35,6 +35,7 @@ test("FILES is exactly the nine pinned originals", () => {
     "webview/assets/use-model-settings-aafcff4b111c.js",
     "webview/assets/composer-content-8ab21f1a1982.js",
     "webview/assets/composer-scope-f0dbf0e746b6.js",
+    "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js",
   ]);
   for (const rel of adapter.FILES) {
     assert.match(adapter.ORIGINAL_HASHES[rel], /^[0-9a-f]{64}$/);
@@ -42,7 +43,7 @@ test("FILES is exactly the nine pinned originals", () => {
   }
 });
 
-test("STAGES and FEATURES match the required seven feature IDs", () => {
+test("STAGES and FEATURES match the required eight feature IDs", () => {
   assert.deepEqual(adapter.STAGES, ["original", "history", "titles", "workflow", "drafts"]);
   assert.deepEqual(
     adapter.FEATURES.map((f) => f.id),
@@ -54,6 +55,7 @@ test("STAGES and FEATURES match the required seven feature IDs", () => {
       "tab-status",
       "workflow-notifications",
       "independent-drafts",
+      "webview-recovery",
     ]
   );
   for (const feature of adapter.FEATURES) {
@@ -61,6 +63,10 @@ test("STAGES and FEATURES match the required seven feature IDs", () => {
     assert.ok(Array.isArray(feature.files));
     for (const file of feature.files) assert.ok(adapter.FILES.includes(file));
   }
+  assert.deepEqual(
+    adapter.FEATURES.find((f) => f.id === "webview-recovery"),
+    { id: "webview-recovery", stage: "drafts", files: [adapter.RECOVERY_FILE] }
+  );
 });
 
 test("transformStage rejects unknown file and unknown stage", () => {
@@ -82,6 +88,9 @@ test("per-stage unaffected files are returned unchanged", () => {
   assert.equal(adapter.transformStage(adapter.HOST, sentinel, "drafts"), sentinel);
   assert.equal(adapter.transformStage(adapter.MODEL_SETTINGS, sentinel, "history"), sentinel);
   assert.equal(adapter.transformStage(adapter.MESSAGE_BUS, sentinel, "history"), sentinel);
+  assert.equal(adapter.transformStage(adapter.RECOVERY_FILE, sentinel, "history"), sentinel);
+  assert.equal(adapter.transformStage(adapter.RECOVERY_FILE, sentinel, "titles"), sentinel);
+  assert.equal(adapter.transformStage(adapter.RECOVERY_FILE, sentinel, "workflow"), sentinel);
 });
 
 test("status runtime aliases are rewritten for the new host", () => {
@@ -183,6 +192,15 @@ test("draft stage scopes the native home key", { skip: !hasInstalled }, () => {
   assert.ok(drafts.includes("companion-draft-isolation-v1"));
 });
 
+test("draft stage applies the pinned webview recovery transform only to its target", { skip: !hasInstalled }, () => {
+  const recovery = require("../../scripts/officialWebviewRecovery.cjs");
+  const source = fs.readFileSync(path.join(INSTALLED, adapter.RECOVERY_FILE), "utf8");
+  const drafts = adapter.transformStage(adapter.RECOVERY_FILE, source, "drafts");
+  assert.equal(drafts, recovery.transform(source));
+  assert.equal(adapter.sha256(drafts), recovery.PATCHED_HASH);
+  assert.ok(drafts.includes("propagateLoadError:!1"));
+});
+
 test("missing anchor throws", { skip: !hasInstalled }, () => {
   const host = fs.readFileSync(path.join(INSTALLED, adapter.HOST), "utf8");
   const corrupted = host.replace(
@@ -207,7 +225,7 @@ test("duplicate anchor throws", { skip: !hasInstalled }, () => {
 });
 
 test("verifyTransforms syntax-checks every generated program", { skip: !hasInstalled }, () => {
-  const workDir = path.join(__dirname, "..", "..", ".artifacts", "status-restore-027", "implementation", "adapter-work", "test-generated");
+  const workDir = path.join(__dirname, "..", "..", ".artifacts", "webview-recovery", "integration", "adapter-work", "test-generated");
   const report = adapter.verifyTransforms(INSTALLED, workDir);
   for (const rel of adapter.FILES) {
     assert.equal(report[rel].syntax, "ok");

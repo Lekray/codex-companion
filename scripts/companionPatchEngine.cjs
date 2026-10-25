@@ -44,7 +44,7 @@ const BACKUP_KIND = 'codex-companion-pristine-backup';
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const VERSION_RE = /^[0-9A-Za-z][0-9A-Za-z._-]*$/;
 const SPEC_STAGES = Object.freeze(['original', 'history', 'titles', 'workflow', 'drafts']);
-const SPEC_FILE_COUNT = 9;
+const SPEC_FILE_COUNTS = Object.freeze([9, 10]);
 const LEGACY_SUPPORTED_VERSION = titles.SUPPORTED_VERSION;
 
 const LEGACY_PINNED_ORIGINAL_HASHES = Object.freeze({
@@ -106,8 +106,8 @@ function normalizeVersionSpec(versionSpec) {
     issues.push('SUPPORTED_VERSION must be a dotted version string without path separators.');
   }
   const files = versionSpec.FILES;
-  if (!Array.isArray(files) || files.length !== SPEC_FILE_COUNT) {
-    issues.push(`FILES must contain exactly ${SPEC_FILE_COUNT} relative paths.`);
+  if (!Array.isArray(files) || !SPEC_FILE_COUNTS.includes(files.length)) {
+    issues.push(`FILES must contain exactly 9 or 10 relative paths.`);
   } else {
     const seen = new Set();
     for (const rel of files) {
@@ -459,7 +459,7 @@ function getManifest() {
 
 function defaultBackupPath(manifest) {
   const base = path.join(localAppDataDir(), 'codex-companion', 'patches', manifest.officialVersion);
-  if (spec) return path.join(base, 'chunks-v1');
+  if (spec) return path.join(base, spec.files.length === 10 ? 'chunks-v2' : 'chunks-v1');
   return manifest.schema === 2 ? path.join(base, 'drafts-v1') : base;
 }
 

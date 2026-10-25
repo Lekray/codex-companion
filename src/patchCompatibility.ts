@@ -26,6 +26,7 @@ const REQUIRED_FILES = [
 const REQUIRED_FILE_SET: ReadonlySet<string> = new Set(REQUIRED_FILES);
 export const COMPOSER_DRAFT_BUNDLE = 'webview/assets/app-initial-7a199c66e670.js';
 export const SCHEMA3_OFFICIAL_VERSION = '26.1021.22027';
+/** Previous 0.2.7 nine-file schema-3 target set, kept for compatibility. */
 export const SCHEMA3_FILES = [
   'package.json',
   'out/extension.js',
@@ -37,6 +38,11 @@ export const SCHEMA3_FILES = [
   'webview/assets/composer-content-8ab21f1a1982.js',
   'webview/assets/composer-scope-f0dbf0e746b6.js',
 ] as const;
+/** Current 0.2.8 schema-3 target set, including the optional webview recovery. */
+export const SCHEMA3_FILES10 = [
+  ...SCHEMA3_FILES,
+  'webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js',
+] as const;
 export const LEGACY_ATTESTATION_FILE = 'patchAttestation.json';
 export const VERSIONED_ATTESTATION_FILES: Readonly<Record<string, string>> = {
   '26.1007.21434': LEGACY_ATTESTATION_FILE,
@@ -45,7 +51,7 @@ export const VERSIONED_ATTESTATION_FILES: Readonly<Record<string, string>> = {
 const LEGACY_COMPATIBILITY_FILES = [...REQUIRED_FILES, COMPOSER_DRAFT_BUNDLE] as const;
 const COMPATIBILITY_FILES_BY_VERSION: Readonly<Record<string, readonly string[]>> = {
   '26.1007.21434': LEGACY_COMPATIBILITY_FILES,
-  [SCHEMA3_OFFICIAL_VERSION]: SCHEMA3_FILES,
+  [SCHEMA3_OFFICIAL_VERSION]: SCHEMA3_FILES10,
 };
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
 const OFFICIAL_PUBLISHER = 'openai';
@@ -99,10 +105,10 @@ function validateAttestation(value: unknown): ValidatedAttestation {
 
   if (schema !== 1 && schema !== 2 && schema !== 3) issues.push('Attestation schema must be 1, 2 or 3.');
   const requiredFiles: readonly string[] = schema === 3
-    ? SCHEMA3_FILES
+    ? SCHEMA3_FILES10
     : schema === 2 ? LEGACY_COMPATIBILITY_FILES : REQUIRED_FILES;
   const requiredFileSet: ReadonlySet<string> = schema === 3
-    ? new Set(SCHEMA3_FILES)
+    ? new Set(SCHEMA3_FILES10)
     : schema === 2 ? new Set(LEGACY_COMPATIBILITY_FILES) : REQUIRED_FILE_SET;
   if (typeof officialVersion !== 'string' || officialVersion.trim() === '') {
     issues.push('Attestation officialVersion must be a non-empty string.');

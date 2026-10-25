@@ -88,6 +88,7 @@ const FEATURE_LABELS: Record<string, { russian: string; english: string }> = {
     english: 'Workflow notifications',
   },
   'independent-drafts': { russian: 'Раздельные черновики вкладок', english: 'Independent tab drafts' },
+  'webview-recovery': { russian: 'Защита чата от ошибок загрузки навигации', english: 'Chat navigation load recovery' },
 };
 
 const STATE_LABELS: Record<MaintenanceState, { russian: string; english: string }> = {
