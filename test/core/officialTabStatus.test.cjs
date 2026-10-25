@@ -98,6 +98,10 @@ function evaluateCore({ je, roots, model }) {
       "notify:__companionWorkflowNotification," +
       "request:__companionWorkflowRequest," +
       "bind:__companionWorkflowBindTitle," +
+      "trackRead:__companionWorkflowTrackRead," +
+      "readResponse:__companionWorkflowReadResponse," +
+      "forgetRead:__companionWorkflowForgetRead," +
+      "forgetWebviewReads:__companionWorkflowForgetWebviewReads," +
       "stateKey:__companionWorkflowStateKey};"
   );
   return factory(je, () => roots.slice(), (value) => (value.length > 30 ? value.slice(0, 30) + "\u2026" : value));
@@ -234,6 +238,11 @@ function userMessageItem(method, turnId, itemId) {
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function savedText(context, api) {
+  const saved = context.store.get(api.stateKey());
+  return saved == null ? "" : JSON.stringify(saved);
 }
 
 // ---------------------------------------------------------------------------
@@ -1031,4 +1040,593 @@ test("free-text agent messages and empty question arrays are not guessed as ques
   assert.strictEqual(panel.title, "[V] Alpha");
   assert.strictEqual(statusEvents(je, "done").length, 1);
   assert.strictEqual(statusEvents(je, "waiting").length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Host-only hydration from observed thread/read
+// ---------------------------------------------------------------------------
+
+function readRequest(id, threadId, includeTurns) {
+  return { id, method: "thread/read", params: { threadId, includeTurns } };
+}
+
+function readThread(threadId, status, turns) {
+  const thread = { id: threadId, hostId: "local", status };
+  if (turns !== undefined) thread.turns = turns;
+  return thread;
+}
+
+function readResponse(id, thread) {
+  return { id, result: thread == null ? null : { thread }, error: null };
+}
+
+function tracked(api, provider, webview, id, threadId, includeTurns) {
+  return api.trackRead(provider, webview, readRequest(id, threadId, includeTurns));
+}
+
+function snapshotEvents(je) {
+  return events(je).filter((event) => event.live === false);
+}
+
+function hydrationHarness(options) {
+  const h = createHarness(options);
+  h.provider = makeProvider();
+  h.webview = { id: "w1" };
+  h.panel = h.provider.add({ title: "Codex" }, h.webview);
+  h.api.install(h.provider, h.context);
+  bind(h.api, h.provider, h.panel, h.webview, "t1", "Alpha");
+  h.read = (id, status, turns) => {
+    tracked(h.api, h.provider, h.webview, id, "t1", true);
+    return h.api.readResponse(h.provider, h.webview, readResponse(id, readThread("t1", status, turns)));
+  };
+  return h;
+}
+
+test("a newer concurrent read can still apply after the older read finishes", () => {
+  const h = hydrationHarness();
+  tracked(h.api, h.provider, h.webview, "old", "t1", false);
+  tracked(h.api, h.provider, h.webview, "new", "t1", false);
+  assert.strictEqual(h.api.readResponse(h.provider, h.webview, readResponse("old", readThread("t1", {type:"active",activeFlags:[]}))), true);
+  assert.strictEqual(h.api.readResponse(h.provider, h.webview, readResponse("new", readThread("t1", {type:"active",activeFlags:["waitingOnApproval"]}))), true);
+  assert.strictEqual(h.panel.title, "[?] Alpha");
+  assert(events(h.je).every(event => event.live === false));
+});
+
+test("a terminal observed before a read also rejects the same turn's stale active snapshot", () => {
+  for (const runtimeType of ["active", "idle"]) {
+    const h = hydrationHarness();
+    h.api.notify(h.provider, started("turn1", 10));
+    h.api.notify(h.provider, completed("turn1", 10, "completed"));
+    assert.strictEqual(h.read("stale",{type:runtimeType,activeFlags:[]},[{id:"turn1",status:"inProgress",startedAt:10,items:[]}]),false);
+    assert.strictEqual(h.panel.title,"[V] Alpha");
+  }
+});
+
+test("a persisted completed turn also wins a stale inProgress read after restart", () => {
+  const h=hydrationHarness({saved:{version:1,roots:["C:\\Project"],threads:{t1:{status:"done",turnId:"turn1",completedTurnId:"turn1",updatedAt:10}}}});
+  assert.strictEqual(h.panel.title,"[V] Alpha");
+  assert.strictEqual(h.read("unloaded-restart",{type:"idle"},[{id:"turn1",status:"completed",startedAt:10,itemsView:"notLoaded",items:[]}]),false);
+  assert.strictEqual(h.panel.title,"[V] Alpha");
+  assert.strictEqual(h.read("stale-restart",{type:"active",activeFlags:[]},[{id:"turn1",status:"inProgress",startedAt:10,items:[]}]),false);
+  assert.strictEqual(h.panel.title,"[V] Alpha");
+});
+
+test("hydration respects an unfinished goal and ignores malformed or unloaded history", () => {
+  const h=hydrationHarness();
+  h.api.notify(h.provider,{method:"thread/goal/updated",params:{threadId:"t1",goal:{status:"active"}}});
+  assert.strictEqual(h.read("goal",{type:"idle"},[{id:"turn1",status:"completed",startedAt:10,items:[]}]),true);
+  assert.strictEqual(h.panel.title,"[~] Alpha");
+  assert.strictEqual(h.provider.__companionWorkflowRuntime.threads.t1.doneEmittedFor,null);
+  assert.strictEqual(h.read("bad-tail",{type:"idle"},[{id:"turn1",status:"completed",startedAt:10},{}]),false);
+  const unknown=hydrationHarness();
+  unknown.read("unloaded",{type:"idle"},[{id:"turn1",status:"completed",startedAt:10,itemsView:"notLoaded",items:[]}]);
+  assert.strictEqual(unknown.panel.title,"Alpha");
+  assert.strictEqual(statusEvents(h.je,"done").length,0);
+});
+
+test("hydration matches individual question replies and ignores unrelated or rejected input", () => {
+  const h=hydrationHarness();
+  const question={id:"m1",type:"agentMessage",questions:[{title:"One"},{title:"Two"}]};
+  const reply=index=>({id:"r"+index,type:"userMessage",content:[{type:"text",text:"<send_user_message_question_reply>"+JSON.stringify({questionItemId:JSON.stringify(["request_user_input_async","m1",index]),question:"Q",answer:"A"})+"</send_user_message_question_reply>"}]});
+  const turn=items=>[{id:"turn1",status:"inProgress",startedAt:10,items}];
+  h.read("one",{type:"idle"},turn([question,reply(0)]));assert.strictEqual(h.panel.title,"[?] Alpha");
+  h.read("unrelated",{type:"idle"},turn([question,{id:"u",type:"userMessage",content:[{type:"text",text:"unrelated"}]},{...reply(1),type:"steeringUserMessage",status:"rejected",input:reply(1).content}]));
+  assert.strictEqual(h.panel.title,"[?] Alpha");
+  const wrapped=reply(1);wrapped.content[0].text="Editor context\n## My request:\n"+wrapped.content[0].text;
+  h.read("both",{type:"idle"},turn([question,reply(0),wrapped]));assert.strictEqual(h.panel.title,"[~] Alpha");
+  assert(!savedText(h.context,h.api).includes("questionItemId"));
+});
+
+test("includeTurns:false restores active flags and systemError but never turn status", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const webview = { id: "w1" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+
+  const info = tracked(api, provider, webview, "r1", "t1", false);
+  assert.deepStrictEqual(
+    { threadId: info.threadId, requestSeq: info.requestSeq, includeTurns: info.includeTurns },
+    { threadId: "t1", requestSeq: 1, includeTurns: false }
+  );
+  assert.strictEqual(
+    api.trackRead(provider, webview, { id: "list1", method: "thread/list", params: { threadId: "t1" } }),
+    null
+  );
+  assert.strictEqual(
+    api.trackRead(provider, webview, { id: "read-no-thread", method: "thread/read", params: {} }),
+    null
+  );
+  assert.strictEqual(
+    api.readResponse(provider, webview, readResponse("r1", readThread("t1", { type: "active", activeFlags: [] }))),
+    true
+  );
+  assert.strictEqual(panel.title, "[~] Alpha");
+  assert.strictEqual(events(je).length, 1);
+  assert.strictEqual(events(je)[0].live, false);
+  assert.strictEqual(events(je)[0].tab.status, "running");
+  assert.strictEqual(provider.__companionWorkflowRuntime.threads.t1.pendingCount, 0);
+
+  tracked(api, provider, webview, "r2", "t1", false);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r2", readThread("t1", { type: "active", activeFlags: ["waitingOnUserInput"] }))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[?] Alpha");
+  assert.strictEqual(snapshotEvents(je).length, 2);
+
+  tracked(api, provider, webview, "r3", "t1", false);
+  assert.strictEqual(
+    api.readResponse(provider, webview, readResponse("r3", readThread("t1", { type: "systemError" }))),
+    true
+  );
+  assert.strictEqual(panel.title, "[!] Alpha");
+  assert.strictEqual(snapshotEvents(je).length, 3);
+
+  const before = events(je).length;
+  tracked(api, provider, webview, "r4", "t1", false);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r4", readThread("t1", { type: "idle" }, [{ id: "turn9", status: "completed", startedAt: 9 }]))
+    ),
+    false
+  );
+  assert.strictEqual(panel.title, "[!] Alpha");
+  assert.strictEqual(events(je).length, before);
+  assert.strictEqual(provider.__companionWorkflowRuntime.readCount, 0);
+});
+
+test("full turns hydrate inProgress, completed, failed and interrupted", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const webview = { id: "w1" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+  const runtime = provider.__companionWorkflowRuntime;
+
+  tracked(api, provider, webview, "r1", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r1", readThread("t1", { type: "idle" }, [{ id: "turn1", status: "inProgress", startedAt: 10 }]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[~] Alpha");
+  assert.strictEqual(runtime.threads.t1.turnActive, true);
+  assert.strictEqual(runtime.threads.t1.turnId, "turn1");
+
+  tracked(api, provider, webview, "r2", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r2", readThread("t1", { type: "idle" }, [{ id: "turn1", status: "completed", startedAt: 10 }]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[V] Alpha");
+  assert.strictEqual(runtime.threads.t1.doneEmittedFor, "turn1");
+  const snapshotDone = snapshotEvents(je).filter((event) => event.tab.status === "done");
+  assert.strictEqual(snapshotDone.length, 1);
+  assert.strictEqual(
+    events(je).filter((event) => event.live !== false && event.tab.status === "done").length,
+    0,
+    "hydration never publishes a live done"
+  );
+
+  // A late duplicate terminal for the hydrated turn must stay silent.
+  const beforeDuplicate = events(je).length;
+  api.notify(provider, completed("turn1", 10, "completed"));
+  assert.strictEqual(panel.title, "[V] Alpha");
+  assert.strictEqual(events(je).length, beforeDuplicate);
+
+  tracked(api, provider, webview, "r3", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r3", readThread("t1", { type: "idle" }, [{ id: "turn2", status: "failed", startedAt: 20 }]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[!] Alpha");
+
+  tracked(api, provider, webview, "r4", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r4", readThread("t1", { type: "idle" }, [{ id: "turn3", status: "interrupted", startedAt: 30 }]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "Alpha");
+  assert.strictEqual(runtime.threads.t1.turnActive, false);
+
+  tracked(api, provider, webview, "r5", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r5", readThread("t1", { type: "idle" }, [{ id: "turn4", status: "cancelled", startedAt: 40 }]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "Alpha");
+});
+
+test("in-progress questions wait, later user messages settle, completed questions never become done", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const webview = { id: "w1" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+  const runtime = provider.__companionWorkflowRuntime;
+  const question = {
+    id: "m1",
+    type: "agentMessage",
+    text: "Which option should I use?",
+    questions: [{ title: "Which option should I use?", options: ["Option A", "Option B"] }],
+  };
+  const answer = {
+    id: "a1",
+    type: "userMessage",
+    content: [{ type: "text", text: "<send_user_message_question_reply>\n" + JSON.stringify({questionItemId: JSON.stringify(["request_user_input_async", "m1", 0]),question:"Which option should I use?",answer:"Option A"}) + "\n</send_user_message_question_reply>" }],
+  };
+
+  tracked(api, provider, webview, "r1", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r1", readThread("t1", { type: "idle" }, [
+        { id: "turn1", status: "inProgress", startedAt: 10, items: [question] },
+      ]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[?] Alpha");
+  assert.strictEqual(runtime.threads.t1.asyncQuestionCount, 1);
+  assert.strictEqual(runtime.threads.t1.pendingCount, 0);
+  assert.ok(!savedText(context, api).includes("Which option should I use?"));
+  assert.ok(!savedText(context, api).includes("Option A"));
+  assert.ok(!savedText(context, api).includes("questions"));
+
+  tracked(api, provider, webview, "r2", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r2", readThread("t1", { type: "idle" }, [
+        { id: "turn1", status: "inProgress", startedAt: 10, items: [question, answer] },
+      ]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[~] Alpha");
+  assert.strictEqual(runtime.threads.t1.asyncQuestionCount, 0);
+  assert.strictEqual(Object.keys(runtime.requests).length, 0);
+
+  // A prompt before the question does not settle it.
+  tracked(api, provider, webview, "r3", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r3", readThread("t1", { type: "idle" }, [
+        {
+          id: "turn2",
+          status: "inProgress",
+          startedAt: 20,
+          items: [
+            { id: "p1", type: "userMessage", content: [{ type: "text", text: "Do the thing" }] },
+            { id: "m2", type: "agentMessage", questions: [{ title: "Q", options: ["A"] }] },
+          ],
+        },
+      ]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[?] Alpha");
+
+  // Completed with an unresolved question: conservative non-done.
+  tracked(api, provider, webview, "r4", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r4", readThread("t1", { type: "idle" }, [
+        { id: "turn2", status: "completed", startedAt: 20, items: [question] },
+      ]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[?] Alpha");
+  assert.strictEqual(runtime.threads.t1.completedTurnId, null);
+  assert.strictEqual(statusEvents(je, "done").length, 0);
+
+  // Completed with a later answer: done is safe.
+  tracked(api, provider, webview, "r5", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r5", readThread("t1", { type: "idle" }, [
+        { id: "turn2", status: "completed", startedAt: 20, items: [question, answer] },
+      ]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[V] Alpha");
+  assert.strictEqual(runtime.threads.t1.doneEmittedFor, "turn2");
+});
+
+test("out-of-order reads apply newest first and drop the stale response", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const webview = { id: "w1" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+
+  tracked(api, provider, webview, "r1", "t1", true);
+  tracked(api, provider, webview, "r2", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r2", readThread("t1", { type: "idle" }, [{ id: "turn2", status: "completed", startedAt: 20 }]))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[V] Alpha");
+  const before = events(je).length;
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r1", readThread("t1", { type: "idle" }, [{ id: "turn1", status: "inProgress", startedAt: 10 }]))
+    ),
+    false
+  );
+  assert.strictEqual(panel.title, "[V] Alpha");
+  assert.strictEqual(events(je).length, before);
+});
+
+test("live events during a read invalidate it, including same-status repeats and terminals", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const webview = { id: "w1" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+
+  api.notify(provider, started("turn1", 10));
+  tracked(api, provider, webview, "r1", "t1", true);
+  // Same-status live event: no new publish, but a new epoch.
+  api.notify(provider, started("turn1", 10));
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r1", readThread("t1", { type: "idle" }, [{ id: "turn1", status: "completed", startedAt: 10 }]))
+    ),
+    false
+  );
+  assert.strictEqual(panel.title, "[~] Alpha");
+  assert.strictEqual(statusEvents(je, "done").length, 0);
+
+  tracked(api, provider, webview, "r2", "t1", true);
+  api.notify(provider, completed("turn1", 10, "completed"));
+  assert.strictEqual(panel.title, "[V] Alpha");
+  const before = events(je).length;
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r2", readThread("t1", { type: "idle" }, [{ id: "turn1", status: "completed", startedAt: 10 }]))
+    ),
+    false
+  );
+  assert.strictEqual(events(je).length, before);
+  assert.strictEqual(statusEvents(je, "done").length, 1);
+});
+
+test("cross-thread, cross-webview, malformed and non-local snapshots are ignored", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const other = provider.add({ title: "Other" }, { id: "w2" });
+  const webview = { id: "w1" };
+  const otherView = { id: "w2" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+  bind(api, provider, other, otherView, "t2", "Beta");
+  const runtime = provider.__companionWorkflowRuntime;
+
+  tracked(api, provider, webview, "r1", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r1", readThread("t2", { type: "idle" }, [{ id: "turn2", status: "completed", startedAt: 20 }]))
+    ),
+    false
+  );
+  assert.strictEqual(runtime.readCount, 0);
+  assert.strictEqual(panel.title, "Alpha");
+
+  tracked(api, provider, webview, "r2", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      otherView,
+      readResponse("r2", readThread("t1", { type: "idle" }, [{ id: "turn1", status: "completed", startedAt: 10 }]))
+    ),
+    false
+  );
+  assert.strictEqual(runtime.readCount, 0);
+  assert.strictEqual(panel.title, "Alpha");
+
+  tracked(api, provider, webview, "r3", "t1", true);
+  assert.strictEqual(api.readResponse(provider, webview, { id: "r3", result: {}, error: null }), false);
+  tracked(api, provider, webview, "r4", "t1", true);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r4", Object.assign(readThread("t1", { type: "idle" }, []), { hostId: "remote" }))
+    ),
+    false
+  );
+  assert.strictEqual(panel.title, "Alpha");
+  assert.strictEqual(events(je).length, 0);
+  assert.strictEqual(runtime.readCount, 0);
+});
+
+test("notLoaded, unknown, absent turns and unknown turn statuses invent nothing", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const webview = { id: "w1" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+
+  const cases = [
+    { type: "notLoaded" },
+    { type: "mystery" },
+    {},
+  ];
+  let index = 0;
+  for (const status of cases) {
+    tracked(api, provider, webview, "f" + index, "t1", true);
+    assert.strictEqual(
+      api.readResponse(provider, webview, readResponse("f" + index, readThread("t1", status, []))),
+      false
+    );
+    index += 1;
+  }
+  const idleCases = [
+    undefined,
+    [],
+    [{ id: "turn1", status: "mystery", startedAt: 10 }],
+    [{ id: null, status: "completed", startedAt: 10 }],
+  ];
+  for (const turns of idleCases) {
+    tracked(api, provider, webview, "f" + index, "t1", true);
+    assert.strictEqual(
+      api.readResponse(provider, webview, readResponse("f" + index, readThread("t1", { type: "idle" }, turns))),
+      false
+    );
+    index += 1;
+  }
+  // Malformed response objects are ignored without throwing.
+  tracked(api, provider, webview, "bad1", "t1", true);
+  assert.strictEqual(api.readResponse(provider, webview, { id: "bad1", result: null, error: null }), false);
+  tracked(api, provider, webview, "bad2", "t1", true);
+  assert.strictEqual(api.readResponse(provider, webview, { id: "bad2", result: { thread: null }, error: null }), false);
+  assert.strictEqual(panel.title, "Alpha");
+  assert.strictEqual(events(je).length, 0);
+});
+
+test("tracking is bounded and cleaned on response, error, abandon and disposal", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const webview = { id: "w1" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+  const runtime = provider.__companionWorkflowRuntime;
+
+  for (let i = 0; i < 100; i += 1) tracked(api, provider, webview, "bulk" + i, "t1", true);
+  assert.ok(runtime.readCount <= 64);
+  assert.ok(Object.keys(runtime.reads).length <= 64);
+  assert.strictEqual(runtime.reads.bulk0, undefined);
+  assert.notStrictEqual(runtime.reads.bulk99, undefined);
+
+  tracked(api, provider, webview, "clean1", "t1", true);
+  assert.strictEqual(api.forgetRead(provider, "clean1"), true);
+  assert.strictEqual(api.readResponse(provider, webview, readResponse("clean1", readThread("t1", { type: "systemError" }))), false);
+
+  tracked(api, provider, webview, "clean2", "t1", true);
+  assert.strictEqual(api.readResponse(provider, webview, { id: "clean2", result: null, error: { message: "boom" } }), false);
+  assert.strictEqual(runtime.reads.clean2, undefined);
+
+  tracked(api, provider, webview, "clean3", "t1", true);
+  assert.strictEqual(api.forgetWebviewReads(provider, webview) >= 1, true);
+  assert.strictEqual(runtime.reads.clean3, undefined);
+
+  tracked(api, provider, webview, "clean4", "t1", true);
+  for (const disposable of provider.subscriptions) disposable.dispose();
+  for (const disposable of context.subscriptions) disposable.dispose();
+  assert.strictEqual(runtime.reads.clean4, undefined);
+  assert.strictEqual(runtime.readCount, 0);
+});
+
+test("async persisted restore cannot overwrite a hydrated live status", async () => {
+  const roots = ["C:\\Project"];
+  const saved = {
+    version: 1,
+    roots,
+    threads: {
+      t1: { status: "done", turnId: "turn0", goalStatus: null, completedTurnId: "turn0", updatedAt: 5 },
+    },
+  };
+  const { je, context, api, resolveRestore } = createHarness({ roots, saved, asyncRestore: true });
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  const webview = { id: "w1" };
+  api.install(provider, context);
+  bind(api, provider, panel, webview, "t1", "Alpha");
+
+  tracked(api, provider, webview, "r1", "t1", false);
+  assert.strictEqual(
+    api.readResponse(
+      provider,
+      webview,
+      readResponse("r1", readThread("t1", { type: "active", activeFlags: ["waitingOnApproval"] }))
+    ),
+    true
+  );
+  assert.strictEqual(panel.title, "[?] Alpha");
+
+  resolveRestore();
+  await flush();
+  assert.strictEqual(panel.title, "[?] Alpha");
+  const runtime = provider.__companionWorkflowRuntime;
+  assert.strictEqual(runtime.threads.t1.status, "waiting");
+  assert.strictEqual(runtime.threads.t1.turnId, null);
+  assert.strictEqual(runtime.threads.t1.completedTurnId, null);
+  assert.strictEqual(je.handlers.get("chatgpt.companion.v1.getState")().tabs[0].status, "waiting");
 });

@@ -232,6 +232,39 @@ test('snapshot/restoration events never notify or play sound', async () => {
   assert.equal(h.calls.claims.length, 0);
   assert.deepEqual(h.calls.sounds, []);
   assert.equal(h.calls.inApp.length, 0);
+  // Accepted snapshots still refresh the attention/status view silently.
+  assert.deepEqual(h.calls.statusEvents.map(event => event.eventId), ['snapshot']);
+  assert.equal(h.calls.statusEvents[0]!.live, false);
+  h.ui.dispose();
+});
+
+test('a silent snapshot is not remembered, so a later identical live event notifies once', async () => {
+  const h = harness();
+  await h.ui.whenReady();
+  const eventId = 'local|thread-1|turn-1|done';
+  h.emit(statusEvent(11, eventId, { live: false, status: 'done', previousStatus: 'running' }));
+  await h.ui.flush();
+
+  assert.deepEqual(
+    h.calls.statusEvents.map(event => [event.eventId, event.live]),
+    [[eventId, false]]
+  );
+  assert.equal(h.calls.claims.length, 0);
+  assert.deepEqual(h.calls.sounds, []);
+  assert.equal(h.calls.inApp.length, 0);
+
+  h.emit(statusEvent(12, eventId, { live: true, status: 'done', previousStatus: 'running' }));
+  await h.ui.flush();
+  assert.deepEqual(h.calls.claims, [eventId]);
+  assert.deepEqual(h.calls.sounds, ['done']);
+  assert.equal(h.calls.inApp.length, 1);
+  assert.deepEqual(
+    h.calls.statusEvents.map(event => [event.eventId, event.live]),
+    [
+      [eventId, false],
+      [eventId, true],
+    ]
+  );
   h.ui.dispose();
 });
 
@@ -382,7 +415,12 @@ test('onStatusEvent receives accepted current events even when notifications are
     live: 'yes',
   });
   await h.ui.flush();
-  assert.deepEqual(h.calls.statusEvents.map(event => event.eventId), ['running-1']);
+  assert.deepEqual(
+    h.calls.statusEvents.map(event => event.eventId),
+    ['running-1', 'running-snapshot']
+  );
+  assert.deepEqual(h.calls.claims, []);
+  assert.deepEqual(h.calls.sounds, []);
   h.ui.dispose();
 });
 

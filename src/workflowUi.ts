@@ -310,11 +310,14 @@ export class WorkflowUi implements DisposableLike {
     if (event.tab.hostId !== 'local') return;
     if (event.sequence <= this.lastSequence) return;
     this.lastSequence = event.sequence;
-    if (!event.live) return;
     if (!this.compatibilityAllowed()) return;
+    // Accepted snapshots (including silent hydration after reload) refresh
+    // titles/status and the attention counter, but must never be remembered,
+    // claimed, notified or sounded. The live-only handling starts below.
+    this.emitStatusEvent(event);
+    if (!event.live) return;
     // A logical status can recur within one turn (running -> waiting -> running).
     // Refresh current metadata even when its notification identity was seen before.
-    this.emitStatusEvent(event);
     if (this.remembered.has(event.eventId)) return;
     this.remember(event.eventId);
     const status = noticeStatus(event.tab.status, event.previousStatus);

@@ -198,6 +198,8 @@ function __companionWorkflowEnsureThread(runtime, threadId) {
       seenUserMessages: Object.create(null),
       seenUserMessageCount: 0,
       questionClosedTurnId: null,
+      liveEpoch: 0,
+      lastHydratedReadSeq: 0,
       observedAt: 0,
       updatedAt: Date.now()
     };
@@ -207,7 +209,12 @@ function __companionWorkflowEnsureThread(runtime, threadId) {
   return runtime.threads[threadId];
 }
 function __companionWorkflowObserve(thread) {
-  if (thread != null) thread.observedAt = Date.now();
+  if (thread == null) return;
+  // A monotonically increasing per-thread epoch, independent of wall-clock
+  // resolution. Every observed live event for the thread invalidates reads
+  // that started earlier, including same-millisecond duplicates.
+  thread.liveEpoch = (thread.liveEpoch || 0) + 1;
+  thread.observedAt = Date.now();
 }
 function __companionWorkflowQuestionKey(turnId, itemId) {
   return turnId + "|" + itemId;
@@ -332,6 +339,15 @@ function __companionWorkflowPruneThreads(runtime) {
     for (var r = 0; r < requestIds.length; r++) {
       if (runtime.requests[requestIds[r]] === removed.threadId) delete runtime.requests[requestIds[r]];
     }
+    if (runtime.reads != null) {
+      var readIds = Object.keys(runtime.reads);
+      for (var w = 0; w < readIds.length; w++) {
+        if (runtime.reads[readIds[w]] != null && runtime.reads[readIds[w]].threadId === removed.threadId) {
+          delete runtime.reads[readIds[w]];
+          runtime.readCount = Math.max(0, (runtime.readCount || 1) - 1);
+        }
+      }
+    }
   }
   runtime.threadCount = Object.keys(runtime.threads).length;
 }
@@ -346,7 +362,7 @@ function __companionWorkflowEventId(threadId, turnId, status, requestKey) {
     (requestKey == null ? "" : "|" + requestKey)
   );
 }
-function __companionWorkflowPublish(runtime, thread, status, previousStatus, turnId, requestKey, forcedEventId) {
+function __companionWorkflowPublish(runtime, thread, status, previousStatus, turnId, requestKey, forcedEventId, live) {
   var eventId =
     forcedEventId != null
       ? forcedEventId
@@ -365,7 +381,7 @@ function __companionWorkflowPublish(runtime, thread, status, previousStatus, tur
     kind: "status",
     instanceId: runtime.instanceId,
     sequence: runtime.sequence,
-    live: true,
+    live: live !== false,
     eventId: eventId,
     tab: tab,
     previousStatus: previousStatus
@@ -375,18 +391,20 @@ function __companionWorkflowPublish(runtime, thread, status, previousStatus, tur
     if (result != null && typeof result.then === "function") result.then(undefined, function () {});
   } catch (e) {}
 }
+function __companionWorkflowApplyStatusExtra(thread, extra) {
+  if (thread == null || extra == null || typeof extra !== "object") return;
+  if (extra.turnId !== undefined) thread.turnId = extra.turnId;
+  if (extra.turnStartedAt !== undefined) thread.turnStartedAt = extra.turnStartedAt;
+  if (extra.turnActive !== undefined) thread.turnActive = extra.turnActive;
+  if (extra.completedTurnId !== undefined) thread.completedTurnId = extra.completedTurnId;
+  if (extra.doneEmittedFor !== undefined) thread.doneEmittedFor = extra.doneEmittedFor;
+}
 function __companionWorkflowSetStatus(runtime, thread, status, extra) {
   status = __companionWorkflowStatus(status);
   var previous = thread.status;
   thread.status = status;
   thread.updatedAt = Date.now();
-  if (extra != null) {
-    if (extra.turnId !== undefined) thread.turnId = extra.turnId;
-    if (extra.turnStartedAt !== undefined) thread.turnStartedAt = extra.turnStartedAt;
-    if (extra.turnActive !== undefined) thread.turnActive = extra.turnActive;
-    if (extra.completedTurnId !== undefined) thread.completedTurnId = extra.completedTurnId;
-    if (extra.doneEmittedFor !== undefined) thread.doneEmittedFor = extra.doneEmittedFor;
-  }
+  __companionWorkflowApplyStatusExtra(thread, extra);
   __companionWorkflowRefreshThreadTitles(runtime.provider, thread.threadId);
   if (previous !== status) {
     __companionWorkflowPublish(
@@ -399,6 +417,453 @@ function __companionWorkflowSetStatus(runtime, thread, status, extra) {
     );
   }
   __companionWorkflowSave(runtime);
+}
+// Hydration updates the same status graph but must never look like a fresh
+// live transition: no claim, notification or sound may be replayed after a
+// reload. The snapshot event only refreshes titles/attention counters.
+function __companionWorkflowSetStatusSilent(runtime, thread, status, extra) {
+  status = __companionWorkflowStatus(status);
+  var previous = thread.status;
+  thread.status = status;
+  thread.updatedAt = Date.now();
+  __companionWorkflowApplyStatusExtra(thread, extra);
+  __companionWorkflowRefreshThreadTitles(runtime.provider, thread.threadId);
+  __companionWorkflowPublish(runtime, thread, status, previous, thread.turnId, null, null, false);
+  __companionWorkflowSave(runtime);
+}
+// ---------------------------------------------------------------------------
+// Host-only hydration from observed native thread/read responses.
+//
+// The bridge never issues its own RPC. It only links a thread/read request to
+// the local webview that sent it, and consumes the response that native code
+// was going to deliver anyway. Records are bounded and always removed on the
+// matching response/error/abandon/failed delivery/webview disposal.
+// ---------------------------------------------------------------------------
+function __companionWorkflowMaxReads() {
+  return 64;
+}
+function __companionWorkflowPruneReads(runtime) {
+  if (runtime == null || runtime.reads == null) return;
+  var ids = Object.keys(runtime.reads);
+  var limit = __companionWorkflowMaxReads();
+  while (ids.length > limit) {
+    var oldestId = null;
+    var oldestSeq = null;
+    for (var i = 0; i < ids.length; i++) {
+      var record = runtime.reads[ids[i]];
+      if (record == null) {
+        ids.splice(i, 1);
+        i -= 1;
+        continue;
+      }
+      if (oldestSeq == null || record.requestSeq < oldestSeq) {
+        oldestSeq = record.requestSeq;
+        oldestId = ids[i];
+      }
+    }
+    if (oldestId == null) break;
+    delete runtime.reads[oldestId];
+    ids = Object.keys(runtime.reads);
+  }
+  runtime.readCount = Object.keys(runtime.reads).length;
+}
+function __companionWorkflowForgetRead(provider, requestId) {
+  try {
+    var runtime = provider == null ? null : provider.__companionWorkflowRuntime;
+    if (runtime == null || runtime.disposed || runtime.reads == null) return false;
+    var key = __companionWorkflowRequestKey(requestId);
+    if (key == null || runtime.reads[key] == null) return false;
+    delete runtime.reads[key];
+    runtime.readCount = Math.max(0, (runtime.readCount || 1) - 1);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+function __companionWorkflowForgetWebviewReads(provider, webview) {
+  try {
+    var runtime = provider == null ? null : provider.__companionWorkflowRuntime;
+    if (runtime == null || runtime.disposed || runtime.reads == null || webview == null) return 0;
+    var ids = Object.keys(runtime.reads);
+    var removed = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var record = runtime.reads[ids[i]];
+      if (record == null || record.webview !== webview) continue;
+      delete runtime.reads[ids[i]];
+      removed += 1;
+    }
+    runtime.readCount = Math.max(0, (runtime.readCount || removed) - removed);
+    return removed;
+  } catch (e) {
+    return 0;
+  }
+}
+function __companionWorkflowTrackRead(provider, webview, request) {
+  try {
+    var runtime = provider == null ? null : provider.__companionWorkflowRuntime;
+    if (runtime == null || runtime.disposed || runtime.reads == null) return null;
+    if (request == null || typeof request !== "object" || request.method !== "thread/read") return null;
+    var params = request.params != null && typeof request.params === "object" ? request.params : null;
+    var threadId = params != null ? __companionWorkflowString(params.threadId) : null;
+    var requestId = __companionWorkflowRequestKey(request.id);
+    if (threadId == null || requestId == null || webview == null) return null;
+    // Only a live local chat panel may originate hydration.
+    var panel;
+    try {
+      panel = provider.findPanelByWebview(webview);
+    } catch (e) {
+      return null;
+    }
+    if (panel == null || !__companionWorkflowChatPanel(provider, panel)) return null;
+    var thread = __companionWorkflowEnsureThread(runtime, threadId);
+    if (thread == null) return null;
+    if (runtime.reads[requestId] != null) {
+      delete runtime.reads[requestId];
+      runtime.readCount = Math.max(0, (runtime.readCount || 1) - 1);
+    }
+    runtime.readSeq = (runtime.readSeq || 0) + 1;
+    var record = {
+      requestId: requestId,
+      requestSeq: runtime.readSeq,
+      threadId: threadId,
+      includeTurns: params != null && params.includeTurns === true,
+      webview: webview,
+      liveEpoch: thread.liveEpoch || 0,
+      createdAt: Date.now()
+    };
+    runtime.reads[requestId] = record;
+    runtime.readCount = Object.keys(runtime.reads).length;
+    if (runtime.readCount > __companionWorkflowMaxReads()) __companionWorkflowPruneReads(runtime);
+    return {
+      requestId: requestId,
+      threadId: threadId,
+      requestSeq: record.requestSeq,
+      includeTurns: record.includeTurns
+    };
+  } catch (e) {
+    return null;
+  }
+}
+function __companionWorkflowLatestTurn(turns) {
+  if (!Array.isArray(turns)) return null;
+  var best = null;
+  var bestStarted = null;
+  for (var i = 0; i < turns.length; i++) {
+    var turn = turns[i];
+    // A malformed tail must not expose an older terminal as the latest turn.
+    if (turn == null || typeof turn !== "object") return null;
+    if (__companionWorkflowString(turn.id) == null || typeof turn.status !== "string") return null;
+    var startedAt = __companionWorkflowNumber(turn.startedAt);
+    if (best == null || (startedAt != null && (bestStarted == null || startedAt >= bestStarted)) || (startedAt == null && bestStarted == null)) {
+      best = turn;
+      bestStarted = startedAt;
+    }
+  }
+  return best;
+}
+function __companionWorkflowTurnQuestions(turn) {
+  var items = turn != null && Array.isArray(turn.items) ? turn.items : null;
+  if (turn != null && turn.itemsView != null && turn.itemsView !== "full") return null;
+  if (items != null && items.length > 512) return null;
+  var candidates = [];
+  if (items == null) return candidates;
+  var answered = Object.create(null);
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (item == null || typeof item !== "object") continue;
+    if (item.type === "userMessage" || (item.type === "steeringUserMessage" && item.status === "accepted")) {
+      // Match the native question-reply envelope. Ordinary messages, rejected
+      // steering and partial replies must not settle unrelated questions.
+      var content = item.type === "userMessage" ? item.content : item.input;
+      if (!Array.isArray(content) || content.length > 128) continue;
+      var text = content.filter(function (part) { return part != null && part.type === "text" && typeof part.text === "string"; })
+        .map(function (part) { return part.text; }).join("\n");
+      var boundary = "\n## My request:\n";
+      var boundaryAt = text.lastIndexOf(boundary);
+      text = (boundaryAt === -1 ? text : text.slice(boundaryAt + boundary.length)).trim();
+      var open = "<send_user_message_question_reply>";
+      var close = "</send_user_message_question_reply>";
+      if (text.length > 65536 || text.indexOf(open) !== 0 || text.slice(-close.length) !== close) continue;
+      var replies;
+      try { replies = JSON.parse(text.slice(open.length, -close.length)); } catch (e) { continue; }
+      if (!Array.isArray(replies)) replies = [replies];
+      if (replies.length === 0 || replies.length > 128) continue;
+      var valid = replies.every(function (reply) {
+        return reply != null && typeof reply.questionItemId === "string" && typeof reply.question === "string" && typeof reply.answer === "string";
+      });
+      if (!valid) continue;
+      for (var r = 0; r < replies.length; r++) answered[replies[r].questionItemId] = true;
+      continue;
+    }
+    if (item.type !== "agentMessage" || !Array.isArray(item.questions) || item.questions.length === 0) {
+      continue;
+    }
+    if (item.questions.length > 128) return null;
+    var itemId = __companionWorkflowString(item.id);
+    if (itemId == null) continue;
+    var questionKeys = [];
+    for (var q = 0; q < item.questions.length; q++) {
+      if (item.questions[q] != null && typeof item.questions[q] === "object") {
+        questionKeys.push(JSON.stringify(["request_user_input_async", itemId, q]));
+      }
+    }
+    if (questionKeys.length === 0) continue;
+    var duplicate = false;
+    for (var c = 0; c < candidates.length; c++) {
+      if (candidates[c].itemId === itemId) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (!duplicate) candidates.push({ itemId: itemId, questionKeys: questionKeys });
+    if (candidates.length > 32) return null;
+  }
+  return candidates.filter(function (candidate) {
+    return candidate.questionKeys.some(function (key) { return answered[key] !== true; });
+  });
+}
+function __companionWorkflowReconcileQuestions(thread, turn, candidates) {
+  var turnId = turn != null ? __companionWorkflowString(turn.id) : null;
+  if (thread == null || turnId == null) return;
+  var keep = Object.create(null);
+  for (var i = 0; i < candidates.length; i++) {
+    keep[__companionWorkflowQuestionKey(turnId, candidates[i].itemId)] = true;
+  }
+  var ids = Object.keys(thread.asyncQuestions);
+  for (var j = 0; j < ids.length; j++) {
+    var question = thread.asyncQuestions[ids[j]];
+    if (question == null || question.turnId !== turnId || keep[ids[j]] === true) continue;
+    delete thread.asyncQuestions[ids[j]];
+    thread.asyncQuestionCount = Math.max(0, (thread.asyncQuestionCount || 1) - 1);
+    __companionWorkflowRememberSettledQuestion(thread, ids[j]);
+  }
+  for (var k = 0; k < candidates.length && (thread.asyncQuestionCount || 0) < 32; k++) {
+    var key = __companionWorkflowQuestionKey(turnId, candidates[k].itemId);
+    if (thread.settledQuestions[key] === true || thread.asyncQuestions[key] != null) continue;
+    thread.asyncQuestions[key] = {
+      turnId: turnId,
+      itemId: candidates[k].itemId,
+      observedAt: Date.now()
+    };
+    thread.asyncQuestionCount = (thread.asyncQuestionCount || 0) + 1;
+  }
+}
+function __companionWorkflowHydrateRead(runtime, thread, snapshot, includeTurns) {
+  if (runtime == null || thread == null || snapshot == null || typeof snapshot !== "object") return false;
+  var status = snapshot.status;
+  if (status == null || typeof status !== "object" || typeof status.type !== "string") return false;
+  var readTurn = includeTurns === true ? __companionWorkflowLatestTurn(snapshot.turns) : null;
+  if (readTurn != null) {
+    var readStartedAt = __companionWorkflowNumber(readTurn.startedAt);
+    if (thread.turnStartedAt != null && readStartedAt != null && readStartedAt < thread.turnStartedAt) return false;
+    if (thread.turnId != null && readTurn.id !== thread.turnId &&
+        (readStartedAt == null || (thread.turnStartedAt != null && readStartedAt <= thread.turnStartedAt))) return false;
+    // Runtime snapshots can lag a terminal already observed for the same turn.
+    if (readTurn.status === "inProgress" && thread.turnActive === false &&
+        thread.turnId === readTurn.id &&
+        (thread.questionClosedTurnId === readTurn.id || thread.completedTurnId === readTurn.id)) return false;
+  }
+  if (status.type === "active") {
+    var flags = Array.isArray(status.activeFlags) ? status.activeFlags : [];
+    var flagWaiting =
+      flags.indexOf("waitingOnApproval") !== -1 || flags.indexOf("waitingOnUserInput") !== -1;
+    var extraActive = { turnActive: true };
+    var latestInProgress = null;
+    if (includeTurns === true) {
+      var latest = __companionWorkflowLatestTurn(snapshot.turns);
+      if (latest != null && latest.status === "inProgress") latestInProgress = latest;
+    }
+    var questionWaiting = false;
+    if (latestInProgress != null) {
+      var startedAt = __companionWorkflowNumber(latestInProgress.startedAt);
+      var latestId = __companionWorkflowString(latestInProgress.id);
+      var sameTurn = thread.turnId == null || latestId == null || thread.turnId === latestId;
+      var fresh = startedAt != null
+        ? thread.turnStartedAt == null || startedAt >= thread.turnStartedAt
+        : sameTurn;
+      if (fresh) {
+        if (thread.turnId != null && latestId != null && thread.turnId !== latestId) {
+          __companionWorkflowClearSyncPending(runtime, thread);
+          __companionWorkflowResetQuestionState(thread);
+          extraActive.completedTurnId = null;
+          extraActive.doneEmittedFor = null;
+        }
+        extraActive.turnId = latestId;
+        extraActive.turnStartedAt = startedAt;
+        var candidates = __companionWorkflowTurnQuestions(latestInProgress);
+        if (candidates != null) __companionWorkflowReconcileQuestions(thread, latestInProgress, candidates);
+        questionWaiting = __companionWorkflowHasPending(thread);
+      }
+    }
+    // Runtime active flags are authoritative; real pending request/question
+    // keys can only add waiting, never synthesize them.
+    var waiting =
+      flagWaiting || questionWaiting || __companionWorkflowHasPending(thread);
+    __companionWorkflowSetStatusSilent(runtime, thread, waiting ? "waiting" : "running", extraActive);
+    thread.observedAt = Math.max(1, Date.now());
+    return true;
+  }
+  if (status.type === "systemError") {
+    __companionWorkflowClearSyncPending(runtime, thread);
+    __companionWorkflowSettleAsyncQuestions(thread, null);
+    thread.questionClosedTurnId = thread.turnId;
+    __companionWorkflowSetStatusSilent(runtime, thread, "error", { turnActive: false, completedTurnId: null, doneEmittedFor: null });
+    thread.observedAt = Math.max(1, Date.now());
+    return true;
+  }
+  // Without full turns only authoritative active flags / systemError may be
+  // restored. Idle/notLoaded never invent a turn status.
+  if (status.type !== "idle" || includeTurns !== true) return false;
+  var turns = Array.isArray(snapshot.turns) ? snapshot.turns : null;
+  if (turns == null || turns.length === 0) return false;
+  var latestTurn = __companionWorkflowLatestTurn(turns);
+  if (latestTurn == null) return false;
+  var turnId = __companionWorkflowString(latestTurn.id);
+  var turnStatus = latestTurn.status;
+  var latestStartedAt = __companionWorkflowNumber(latestTurn.startedAt);
+  if (turnId == null) return false;
+  // A snapshot for an older turn must never overwrite a newer live start or a
+  // terminal of the current turn.
+  if (
+    thread.turnStartedAt != null &&
+    latestStartedAt != null &&
+    latestStartedAt < thread.turnStartedAt
+  ) {
+    return false;
+  }
+  if (turnStatus !== "inProgress" && thread.turnId != null && thread.turnId !== turnId) {
+    // A different terminal turn needs explicit newer timestamps. Without them
+    // the current live/newer turn wins and the snapshot is stale.
+    if (!(latestStartedAt != null && (thread.turnStartedAt == null || latestStartedAt > thread.turnStartedAt))) {
+      return false;
+    }
+  }
+  if (turnStatus === "inProgress") {
+    if (thread.turnId != null && thread.turnId !== turnId) {
+      __companionWorkflowClearSyncPending(runtime, thread);
+      __companionWorkflowResetQuestionState(thread);
+    }
+    var turnCandidates = __companionWorkflowTurnQuestions(latestTurn);
+    if (turnCandidates != null) __companionWorkflowReconcileQuestions(thread, latestTurn, turnCandidates);
+    var activeWaiting = __companionWorkflowHasPending(thread);
+    __companionWorkflowSetStatusSilent(runtime, thread, activeWaiting ? "waiting" : "running", {
+      turnId: turnId,
+      turnStartedAt: latestStartedAt,
+      turnActive: true,
+      completedTurnId: null,
+      doneEmittedFor: null
+    });
+    thread.observedAt = Math.max(1, Date.now());
+    return true;
+  }
+  if (turnStatus === "completed") {
+    var completedCandidates = __companionWorkflowTurnQuestions(latestTurn);
+    if (completedCandidates == null) return false;
+    if (completedCandidates.length > 0 ||
+        (!Array.isArray(latestTurn.items) && __companionWorkflowHasPending(thread))) {
+      // A completed turn that still shows an unanswered question must never
+      // become a false done. Keep existing waiting, otherwise stay idle.
+      var keepWaiting = thread.status === "waiting" || __companionWorkflowHasPending(thread);
+      __companionWorkflowSetStatusSilent(runtime, thread, keepWaiting ? "waiting" : "idle", {
+        turnId: turnId,
+        turnStartedAt: latestStartedAt,
+        turnActive: false,
+        completedTurnId: null,
+        doneEmittedFor: null
+      });
+      thread.observedAt = Math.max(1, Date.now());
+      return true;
+    }
+    __companionWorkflowClearSyncPending(runtime, thread);
+    __companionWorkflowSettleAsyncQuestions(thread, turnId);
+    thread.questionClosedTurnId = turnId;
+    if (thread.goalStatus != null && thread.goalStatus !== "complete") {
+      __companionWorkflowSetStatusSilent(runtime, thread, thread.goalStatus === "active" ? "running" : "waiting", {
+        turnId: turnId, turnStartedAt: latestStartedAt, turnActive: false,
+        completedTurnId: turnId, doneEmittedFor: null
+      });
+      thread.observedAt = Math.max(1, Date.now());
+      return true;
+    }
+    thread.completedTurnId = turnId;
+    thread.doneEmittedFor = turnId;
+    __companionWorkflowSetStatusSilent(runtime, thread, "done", {
+      turnId: turnId,
+      turnStartedAt: latestStartedAt,
+      turnActive: false,
+      completedTurnId: turnId,
+      doneEmittedFor: turnId
+    });
+    thread.observedAt = Math.max(1, Date.now());
+    return true;
+  }
+  if (turnStatus === "failed") {
+    __companionWorkflowClearSyncPending(runtime, thread);
+    __companionWorkflowSettleAsyncQuestions(thread, null);
+    thread.questionClosedTurnId = turnId;
+    __companionWorkflowSetStatusSilent(runtime, thread, "error", {
+      turnId: turnId,
+      turnStartedAt: latestStartedAt,
+      turnActive: false,
+      completedTurnId: null,
+      doneEmittedFor: null
+    });
+    thread.observedAt = Math.max(1, Date.now());
+    return true;
+  }
+  if (turnStatus === "interrupted" || turnStatus === "cancelled" || turnStatus === "canceled") {
+    __companionWorkflowClearSyncPending(runtime, thread);
+    __companionWorkflowSettleAsyncQuestions(thread, null);
+    thread.questionClosedTurnId = turnId;
+    __companionWorkflowSetStatusSilent(runtime, thread, "idle", {
+      turnId: turnId,
+      turnStartedAt: latestStartedAt,
+      turnActive: false,
+      completedTurnId: null,
+      doneEmittedFor: null
+    });
+    thread.observedAt = Math.max(1, Date.now());
+    return true;
+  }
+  return false;
+}
+function __companionWorkflowReadResponse(provider, webview, response) {
+  try {
+    var runtime = provider == null ? null : provider.__companionWorkflowRuntime;
+    if (runtime == null || runtime.disposed || runtime.reads == null) return false;
+    if (response == null || typeof response !== "object") return false;
+    var requestId = __companionWorkflowRequestKey(response.id);
+    if (requestId == null) return false;
+    var record = runtime.reads[requestId];
+    if (record == null) return false;
+    // The response, or its error, always ends the tracking record.
+    __companionWorkflowForgetRead(provider, requestId);
+    if (record.webview !== webview) return false;
+    if (response.error != null) return false;
+    var result = response.result;
+    if (result == null || typeof result !== "object") return false;
+    var snapshot = result.thread;
+    if (snapshot == null || typeof snapshot !== "object") return false;
+    var snapshotId = __companionWorkflowString(snapshot.id);
+    if (snapshotId == null || snapshotId !== record.threadId) return false;
+    if (
+      snapshot.hostId !== undefined &&
+      snapshot.hostId !== null &&
+      __companionWorkflowString(snapshot.hostId) !== "local"
+    ) {
+      return false;
+    }
+    var thread = __companionWorkflowEnsureThread(runtime, record.threadId);
+    if (thread == null) return false;
+    if (record.requestSeq <= (thread.lastHydratedReadSeq || 0)) return false;
+    // Any live event observed for the thread after the request invalidates
+    // this response, including a same-status event in the same millisecond.
+    if ((thread.liveEpoch || 0) !== record.liveEpoch) return false;
+    thread.lastHydratedReadSeq = record.requestSeq;
+    return __companionWorkflowHydrateRead(runtime, thread, snapshot, record.includeTurns);
+  } catch (e) {
+    return false;
+  }
 }
 function __companionWorkflowSave(runtime) {
   if (runtime == null || runtime.disposed) return;
@@ -501,6 +966,9 @@ function __companionWorkflowInstall(provider, context) {
     threads: Object.create(null),
     threadCount: 0,
     requests: Object.create(null),
+    reads: Object.create(null),
+    readCount: 0,
+    readSeq: 0,
     disposed: false
   };
   provider.__companionWorkflowRuntime = runtime;
@@ -578,6 +1046,8 @@ function __companionWorkflowInstall(provider, context) {
           runtime.threads = Object.create(null);
           runtime.threadCount = 0;
           runtime.requests = Object.create(null);
+          runtime.reads = Object.create(null);
+          runtime.readCount = 0;
         }
       });
     }
@@ -591,6 +1061,8 @@ function __companionWorkflowInstall(provider, context) {
         runtime.threads = Object.create(null);
         runtime.threadCount = 0;
         runtime.requests = Object.create(null);
+        runtime.reads = Object.create(null);
+        runtime.readCount = 0;
         __companionWorkflowRefreshAllTitles(runtime);
         __companionWorkflowSave(runtime);
       });

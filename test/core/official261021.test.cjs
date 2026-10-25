@@ -143,9 +143,37 @@ test("full stage chain is incremental and deterministic", { skip: !hasInstalled 
   assert.ok(workflow.includes("companion-project-model-request"));
   assert.ok(workflow.includes("companion-project-model-selected"));
   assert.ok(workflow.includes("__companionWorkflowGetProjectModel"));
+  assert.ok(workflow.includes("__companionWorkflowTrackRead(this,e,r.request)"));
+  assert.ok(workflow.includes("__companionWorkflowReadResponse(this,n,{id:r"));
+  assert.ok(workflow.includes("__companionWorkflowForgetRead(this,String(r.requestId))"));
+  assert.ok(workflow.includes("__companionWorkflowForgetRead(this,ye)"));
+  assert.ok(workflow.includes("__companionWorkflowForgetWebviewReads(this,e)"));
+  assert.ok(workflow.includes('__companionIsHistoryMethod(m){return m==="thread/list"||m==="thread/search"}'));
 
   const workflow2 = adapter.transformStage(adapter.HOST, titles, "workflow");
   assert.equal(workflow, workflow2);
+});
+
+test("workflow hydration observes only the existing thread/read request/response", { skip: !hasInstalled }, () => {
+  const host = fs.readFileSync(path.join(INSTALLED, adapter.HOST), "utf8");
+  const history = adapter.transformStage(adapter.HOST, host, "history");
+  const titles = adapter.transformStage(adapter.HOST, history, "titles");
+  const workflow = adapter.transformStage(adapter.HOST, titles, "workflow");
+  for (const marker of [
+    "__companionWorkflowTrackRead(this,e,r.request)",
+    "__companionWorkflowReadResponse(this,n,{id:r",
+    "__companionWorkflowForgetRead(this,String(r.requestId))",
+    "__companionWorkflowForgetRead(this,ye)",
+    "__companionWorkflowForgetWebviewReads(this,e)",
+  ]) {
+    assert.equal(workflow.split(marker).length - 1, 1, marker);
+  }
+  assert.ok(
+    workflow.includes('if (request == null || typeof request !== "object" || request.method !== "thread/read") return null;')
+  );
+  assert.ok(workflow.includes("function __companionWorkflowSetStatusSilent"));
+  assert.ok(workflow.includes("live: live !== false"));
+  assert.ok(workflow.includes("thread.liveEpoch = (thread.liveEpoch || 0) + 1"));
 });
 
 test("draft stage scopes the native home key", { skip: !hasInstalled }, () => {
@@ -179,7 +207,7 @@ test("duplicate anchor throws", { skip: !hasInstalled }, () => {
 });
 
 test("verifyTransforms syntax-checks every generated program", { skip: !hasInstalled }, () => {
-  const workDir = path.join(__dirname, "..", "..", ".artifacts", "update-024", "adapter-work", "test-generated");
+  const workDir = path.join(__dirname, "..", "..", ".artifacts", "status-restore-027", "implementation", "adapter-work", "test-generated");
   const report = adapter.verifyTransforms(INSTALLED, workDir);
   for (const rel of adapter.FILES) {
     assert.equal(report[rel].syntax, "ok");

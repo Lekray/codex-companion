@@ -1,5 +1,79 @@
 # Реализация Codex Companion
 
+## 0.2.7 — тихое восстановление статусов (принято, локально установлено)
+
+Область — только официальный OpenAI **26.1021.22027**. Слой 26.1007.21434
+runtime/metadata побайтно прежний; прежние patch-build стадии, webviews и
+pre-workflow не менялись. Source-level acceptance
+`.artifacts/status-restore-027/accepted-source.json`: изменены только modern host
+workflow/drafts (`out/extension.js`), остальные цели совпадают с прежними принятыми
+байтами.
+
+### Наблюдение thread/read
+
+Новых RPC и второго App Server нет. Adapter `scripts/official261021.cjs`
+встраивает в существующие пути четыре вызова: `__companionWorkflowTrackRead` при
+отправке `thread/read`, `__companionWorkflowReadResponse` при получении ответа,
+`__companionWorkflowForgetRead` при abandon/failed delivery и
+`__companionWorkflowForgetWebviewReads` при dispose webview. Сам запрос и фильтрация
+истории остаются native/webview.
+
+`resources/officialTabStatusV2.js` хранит не более 64 записей чтения
+(`__companionWorkflowMaxReads`), каждая привязана к thread, webview и
+монотонному `requestSeq`; для потока хранится `lastHydratedReadSeq` и
+`liveEpoch`. Ответ принимается, только если совпали request id/webview,
+snapshot id, локальный hostId, `requestSeq` новее уже применённого и live epoch
+не изменился. Любое live-событие потока увеличивает epoch и тем самым отменяет
+ответы, начатые раньше. Дополнительно проверяются turn id/startedAt и признак
+уже закрытого вопроса, поэтому поздний/переставленный снимок не перекрывает
+более новый turn или terminal. Запись удаляется на ответ, ошибку, abandon,
+failed delivery и dispose; thread pruning сохраняет активные/привязанные потоки.
+
+### Статус из снимка
+
+`__companionWorkflowHydrateRead`:
+
+- `active` — `waiting` при `waitingOnApproval`/`waitingOnUserInput`, реальном
+  pending request или вопросе; иначе `running`.
+- `systemError` — `error` с очисткой ожиданий.
+- Без полного `turns` (`includeTurns:false`) других переходов нет; idle/notLoaded
+  не выдумывают turn.
+- Полный `turns`: `inProgress` → running/waiting, `completed` → done,
+  `failed` → error, `interrupted`/`cancelled`/`canceled` → idle.
+- `completed` при незавершённой goal (`goalStatus != complete`) не даёт done:
+  active остаётся running, остальные — waiting. Незавершённые вопросы также
+  удерживают waiting и не дают ложного `[V]`.
+
+Все переходы идут через `__companionWorkflowSetStatusSilent`, который публикует
+`live:false`. `src/workflowUi.ts` принимает такой snapshot, обновляет название,
+статус и счётчик через `onStatusEvent`, затем сразу выходит до `remembered`,
+notice и sound. Реальные последующие события обрабатываются обычным live-путём.
+
+### Вопросы и границы
+
+Вопросы inProgress берутся из `agentMessage.questions` ограниченного размера.
+Ответом считается только `userMessage` или принятое `steeringUserMessage` с
+точным конвертом `<send_user_message_question_reply>…</send_user_message_question_reply>`
+и JSON-полями
+`questionItemId`/`question`/`answer`. Частичный ответ закрывает лишь указанные
+вопросы; отклонённое steering и посторонний текст ничего не закрывают, лишние
+вопросы не синтезируются.
+
+Неразрешённые вопросы completed turn удерживают idle/прежнее waiting и не дают
+ложного done. При отсутствующем `items`, `itemsView` не `full`, превышенных
+лимитах и постраничных данных точное состояние вопросов неизвестно — это не
+надёжное восстановление; completed без доступных items и без pending может
+завершиться done. Изображения и история квот остаются backlog; следующая работа
+по статусам — вопросы завершённых/постраничных turn.
+
+Main: **426 passed, 0 failed/skipped** — .artifacts/status-restore-027/tests-main-tracked.log.
+Живой синтетический UI/cold restart, package exact5/exact9 rollback/reinstall/no-op
+и локальная установка приняты; детали — docs/HANDOFF.md, evidence —
+.artifacts/status-restore-027/. Прежний engine 0.2.6 вернул исходные файлы OpenAI,
+затем engine 0.2.7 установил новый слой. Backup сохранён по hash/mtime.
+Другие клиенты не наблюдаются; сообщений модели, автоматического reload, polling,
+resume и публикации нет.
+
 ## 0.2.4 — второй официальный билд
 
 Старый слой 26.1007.21434 и его helpers/transforms/manifests/attestations

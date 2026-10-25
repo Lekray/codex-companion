@@ -337,6 +337,19 @@ const ANCHOR_RAW_NOTIFICATION =
 const ANCHOR_ON_REQUEST =
   'onRequest:X=>{this.broadcastToAllViews({type:"mcp-request",hostId:"local",request:X})}';
 
+// These are the history-stage replacements, which are the actual baseline for
+// the workflow stage. Hydration only observes the existing thread/read RPC.
+const ANCHOR_READ_REQUEST_PATCHED =
+  "let{id:n,method:o,params:i}=r.request;this.pendingMcpRequests.set(String(n),e),__companionIsHistoryMethod(o)&&((this.__companionHistoryRequests??=new Map).set(String(n),{method:o,webview:e})),this.codexMcpConnection.sendRequest(ZR,String(n),o,i,r.retainResponse);break}";
+const ANCHOR_READ_RESPONSE_PATCHED =
+  'this.pendingMcpRequests.delete(r);var m=this.__companionHistoryRequests?.get(r);this.__companionHistoryRequests?.delete(r);this.chunkedMessageSender.send(n,{type:"mcp-response",hostId:"local",message:{id:e.id,result:m?__companionFilterHistoryResult(m.method,e.result):e.result,error:e.error}})}';
+const ANCHOR_READ_ABANDON_PATCHED =
+  'case"mcp-request-abandon":{this.pendingMcpRequests.delete(String(r.requestId)),this.__companionHistoryRequests?.delete(String(r.requestId)),this.codexMcpConnection.abandonRequest(ZR,String(r.requestId));break}';
+const ANCHOR_READ_DELIVERY_PATCHED =
+  'onRequestDelivery:X=>{let ye=String(X.delivery.requestId),Ce=this.pendingMcpRequests.get(ye);Ce!=null&&(X.type==="failed"&&(this.pendingMcpRequests.delete(ye),this.__companionHistoryRequests?.delete(ye)),this.postMessageToWebview(Ce,{type:"mcp-request-delivery",hostId:"local",update:X}))}';
+const ANCHOR_READ_CLEAR_PENDING_PATCHED =
+  "clearPendingRequestsForWebview(e){if(e){for(let[r,n]of this.pendingMcpRequests.entries())n===e&&(this.pendingMcpRequests.delete(r),this.codexMcpConnection.abandonRequest(ZR,r));if(this.__companionHistoryRequests)for(let[r,n]of this.__companionHistoryRequests.entries())n.webview===e&&this.__companionHistoryRequests.delete(r)}}";
+
 const ANCHOR_INSTALL =
   "mt=new cN(Se=>$e.reportAppEntryReceipt(Se),Ot.window.state.focused)";
 
@@ -566,6 +579,36 @@ function transformWorkflowHost(text) {
     ANCHOR_ON_REQUEST,
     'onRequest:X=>{try{__companionWorkflowRequest(this,X)}catch(_e){}this.broadcastToAllViews({type:"mcp-request",hostId:"local",request:X})}',
     "extension.js:observe server requests before broadcast"
+  );
+  t = replaceOnce(
+    t,
+    ANCHOR_READ_REQUEST_PATCHED,
+    "let{id:n,method:o,params:i}=r.request;this.pendingMcpRequests.set(String(n),e),__companionIsHistoryMethod(o)&&((this.__companionHistoryRequests??=new Map).set(String(n),{method:o,webview:e})),__companionWorkflowTrackRead(this,e,r.request),this.codexMcpConnection.sendRequest(ZR,String(n),o,i,r.retainResponse);break}",
+    "extension.js:track existing thread/read requests for hydration"
+  );
+  t = replaceOnce(
+    t,
+    ANCHOR_READ_RESPONSE_PATCHED,
+    'this.pendingMcpRequests.delete(r);var m=this.__companionHistoryRequests?.get(r);this.__companionHistoryRequests?.delete(r);__companionWorkflowReadResponse(this,n,{id:r,result:e.result,error:e.error}),this.chunkedMessageSender.send(n,{type:"mcp-response",hostId:"local",message:{id:e.id,result:m?__companionFilterHistoryResult(m.method,e.result):e.result,error:e.error}})}',
+    "extension.js:hydrate status from observed thread/read responses"
+  );
+  t = replaceOnce(
+    t,
+    ANCHOR_READ_ABANDON_PATCHED,
+    'case"mcp-request-abandon":{this.pendingMcpRequests.delete(String(r.requestId)),this.__companionHistoryRequests?.delete(String(r.requestId)),__companionWorkflowForgetRead(this,String(r.requestId)),this.codexMcpConnection.abandonRequest(ZR,String(r.requestId));break}',
+    "extension.js:clear hydration tracking on abandon"
+  );
+  t = replaceOnce(
+    t,
+    ANCHOR_READ_DELIVERY_PATCHED,
+    'onRequestDelivery:X=>{let ye=String(X.delivery.requestId),Ce=this.pendingMcpRequests.get(ye);Ce!=null&&(X.type==="failed"&&(this.pendingMcpRequests.delete(ye),this.__companionHistoryRequests?.delete(ye),__companionWorkflowForgetRead(this,ye)),this.postMessageToWebview(Ce,{type:"mcp-request-delivery",hostId:"local",update:X}))}',
+    "extension.js:clear hydration tracking on failed delivery"
+  );
+  t = replaceOnce(
+    t,
+    ANCHOR_READ_CLEAR_PENDING_PATCHED,
+    "clearPendingRequestsForWebview(e){if(e){for(let[r,n]of this.pendingMcpRequests.entries())n===e&&(this.pendingMcpRequests.delete(r),this.codexMcpConnection.abandonRequest(ZR,r));if(this.__companionHistoryRequests)for(let[r,n]of this.__companionHistoryRequests.entries())n.webview===e&&this.__companionHistoryRequests.delete(r);__companionWorkflowForgetWebviewReads(this,e)}}",
+    "extension.js:clear hydration tracking on webview disposal"
   );
   t = replaceOnce(
     t,

@@ -1,6 +1,55 @@
 # Контекст для продолжения
 
-## CURRENT — 0.2.6, установлено 25 октября 2026
+## CURRENT — 0.2.7, установлено 25 октября 2026
+
+На «дальше» выполнен следующий пункт очереди: тихое восстановление статусов
+после reload для OpenAI **26.1021.22027**. Companion **0.2.7** локально установлен.
+Наблюдаются только существующие запросы/ответы `thread/read` официальной панели;
+нового RPC/App Server, polling, resume и сообщений модели нет.
+
+- Runtime active flags восстанавливают running/waiting, systemError — error.
+  При includeTurns:true используются последние inProgress/completed/failed/
+  interrupted turns. Незавершённая цель и известные вопросы не дают ложного [V].
+- Не более 64 записей чтения; проверяются webview/thread, sequence, live epoch,
+  id/время turn. Новые live-события и известные terminal выигрывают у устаревшего
+  снимка. Отсутствующие/неполные данные не сбрасывают известное завершение.
+- Hydration публикует live:false: название/счётчик обновляются без notice/sound.
+  Последующие live-события уведомляют обычно. Ответы на вопросы сопоставляются
+  по native-конверту и отдельным questionItemId, включая частичные ответы;
+  непринятое steering и посторонний текст вопросы не закрывают.
+- Граница: вопросы completed turn после reload и постраничная история не
+  восстанавливаются надёжно. Без полного turns доступны только runtime flags;
+  изображения и история квот остаются backlog. Другие клиенты не наблюдаются.
+- Main: **426 passed, 0 failed/skipped** в tests-main-tracked.log; npm build
+  пройден. Отслеживаемый набор исключает новый пустой тест соседней сессии;
+  её officialWebviewRecovery файлы сохранены и в этот выпуск не входят.
+- Main проверил реальные вкладки отдельного VS Code: running/waiting, счётчик,
+  cold restart и тихую hydration, stale read после terminal, тихий повтор terminal
+  и последующее live completion. Статусы синтетические, сообщений модели 0.
+  В изолированную native-копию добавлены test hooks; отдельная тестовая копия
+  Companion имеет attestation ровно этих изменений. Защита продукта не отключалась.
+  В UI проверена диспетчеризация звука, физическое воспроизведение не повторялось;
+  WAV прежние. Скриншоты просмотрены; native promo перекрывал composer, счётчик
+  и заголовок были видимы. Ошибки font/offline совпали с прежним контролем 0.2.6.
+- Из конечного VSIX пройдены exact5/exact9 restore/reinstall/no-op и обновление
+  через точный restore engine 0.2.6. Он возвращает исходные файлы OpenAI, затем
+  engine 0.2.7 устанавливает новый слой. Backup остаётся прежним и валидным.
+- Установленные **114 файлов** совпадают с VSIX; package отличается только
+  __metadata. Compatibility ok, backup valid, canRestore true. Из native только
+  host изменил байты; webviews совпадают с прежними. После restore/install их
+  mtime может измениться. **21 файл backup** сохранён по hash/mtime;
+  legacy runtime/metadata 26.1007 побайтно прежние.
+
+Evidence — .artifacts/status-restore-027/: accepted-source.json,
+tests-main-tracked.log, ui/accepted-native-ui.json, ui/fixture-attestation.json,
+ui/accepted-console.json, accepted-portable.json, package-inspection.json,
+installed-native.json, installed-final.json. Неудачные попытки сохранены отдельно.
+Main исправил основу Flash: epoch для двух одновременных reads, stale active
+после terminal/перезапуска, цель, точные ответы/частичные вопросы и bounded scans.
+Рабочие окна не закрывались и не reload. После всех задач пользователь делает
+один ручной Developer: Reload Window. Публикации нет; этот этап завершён.
+
+## Предыдущий этап — 0.2.6, установлено 25 октября 2026
 
 На «делай» после предложения ближайшего выпуска реализованы, приняты Main и
 локально установлены исправление «Истории проекта», навигация по ожиданиям и
@@ -47,7 +96,7 @@ DeepSeek Flash реализовал основу и документы/скри�
 возврат promise, tab-disposal race и тестовый harness (hydration, dirty document,
 Windows module identity). Неудачные тестовые попытки сохранены отдельно.
 
-Следующий этап (не реализован): восстановление статусов через thread/read требует
+Следующий этап на момент 0.2.6 (реализовано частично в 0.2.7): восстановление статусов через thread/read требует
 отдельного guarded native patch и проверки stale/terminal, включая вопросы после
 completed turn. Изображения живут в памяти отдельно от текста — нужен отдельный
 native target, формат хранения, лимиты и очистка. История квот — account-wide,
