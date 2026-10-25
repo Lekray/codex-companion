@@ -1,0 +1,11 @@
+{
+  "displayName": "Codex Companion",
+  "description": "Вкладки диалогов, квоты и уведомления Codex для проекта.",
+  "open": "Открыть",
+  "rename": "Переименовать окно",
+  "history": "История",
+  "refreshQuotas": "Обновить квоты",
+  "cliPath": "Путь к исполняемому файлу Codex CLI. Если пусто — CLI официального расширения, затем PATH.",
+  "windowsNotifications": "Показывать уведомления Windows, когда это окно VS Code находится в фоне.",
+  "notificationSound": "Воспроизводить звук уведомлений Windows."
+}

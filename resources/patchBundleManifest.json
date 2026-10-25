@@ -1,0 +1,106 @@
+{
+  "schema": 2,
+  "officialVersion": "26.1007.21434",
+  "publisher": "openai",
+  "name": "chatgpt",
+  "files": [
+    "package.json",
+    "out/extension.js",
+    "webview/assets/app-initial-97d3534ad35f.js",
+    "webview/assets/app-initial-c014f9ee4429.js",
+    "webview/assets/app-initial-7a199c66e670.js"
+  ],
+  "stages": {
+    "original": {
+      "package.json": "c81df9507b9e9982bbc41f858925d102fb8b62f63afc9b96f8502cb08d901e85",
+      "out/extension.js": "a8069de80c8f8141481d033f94c3a95e1b59f399143cb2554d3f68469dfbe5b8",
+      "webview/assets/app-initial-97d3534ad35f.js": "47e9e488122cf37a6564ed57d11f499d9ac062b2e49db729091fe3c163a64b49",
+      "webview/assets/app-initial-c014f9ee4429.js": "aabbfa7c366706365a239b090ca1c657b6a0213d7287e54ef0a32d1b2e5ff6a0",
+      "webview/assets/app-initial-7a199c66e670.js": "59b909377a370e09cb8523ab99a1f4ff282a0126527bd339db31e6d9ac7c9c26"
+    },
+    "history": {
+      "package.json": "c81df9507b9e9982bbc41f858925d102fb8b62f63afc9b96f8502cb08d901e85",
+      "out/extension.js": "421afd3d7be99c5c5b4f1fc92c2314f3bd15fd3d2cf4ec2d710132048a72b335",
+      "webview/assets/app-initial-97d3534ad35f.js": "c06c368bc28afd043ff58ac8161b92ea7affb61b4bbf93a8339afdf4f11c4335",
+      "webview/assets/app-initial-c014f9ee4429.js": "f4f7508fce45d122a989b1853f9c48ef47d972ab2a59a893ad965c45da87b65d",
+      "webview/assets/app-initial-7a199c66e670.js": "59b909377a370e09cb8523ab99a1f4ff282a0126527bd339db31e6d9ac7c9c26"
+    },
+    "titles": {
+      "package.json": "c81df9507b9e9982bbc41f858925d102fb8b62f63afc9b96f8502cb08d901e85",
+      "out/extension.js": "d9a6267feb3ea6338a87b334ded7c45cfedfbc0ec374382dfda16aa4347228ea",
+      "webview/assets/app-initial-97d3534ad35f.js": "c06c368bc28afd043ff58ac8161b92ea7affb61b4bbf93a8339afdf4f11c4335",
+      "webview/assets/app-initial-c014f9ee4429.js": "f0dec9db2243d3496311f72feacecc966e43cc659736188289cc1a0371755944",
+      "webview/assets/app-initial-7a199c66e670.js": "59b909377a370e09cb8523ab99a1f4ff282a0126527bd339db31e6d9ac7c9c26"
+    },
+    "workflow": {
+      "package.json": "c81df9507b9e9982bbc41f858925d102fb8b62f63afc9b96f8502cb08d901e85",
+      "out/extension.js": "35095de61f3acfdd0296a91e90afc6bec25fa9193d2d312782206ec1a0306d6b",
+      "webview/assets/app-initial-97d3534ad35f.js": "c06c368bc28afd043ff58ac8161b92ea7affb61b4bbf93a8339afdf4f11c4335",
+      "webview/assets/app-initial-c014f9ee4429.js": "a39eeb9e8403aa8feacb7bffb75c09f500aeeb1b10991de7cc4d5c6904cfe4be",
+      "webview/assets/app-initial-7a199c66e670.js": "59b909377a370e09cb8523ab99a1f4ff282a0126527bd339db31e6d9ac7c9c26"
+    },
+    "drafts": {
+      "package.json": "c81df9507b9e9982bbc41f858925d102fb8b62f63afc9b96f8502cb08d901e85",
+      "out/extension.js": "35095de61f3acfdd0296a91e90afc6bec25fa9193d2d312782206ec1a0306d6b",
+      "webview/assets/app-initial-97d3534ad35f.js": "c06c368bc28afd043ff58ac8161b92ea7affb61b4bbf93a8339afdf4f11c4335",
+      "webview/assets/app-initial-c014f9ee4429.js": "c15d1ee60946422f066730d8097689b37f1c376630add541a3b4917c1a29b34a",
+      "webview/assets/app-initial-7a199c66e670.js": "934317defcfd5ebf57428ca458354ad33b5b9355c4f99cc46fc52bb99470bda7"
+    }
+  },
+  "features": [
+    {
+      "id": "project-history",
+      "stage": "history",
+      "files": [
+        "out/extension.js",
+        "webview/assets/app-initial-97d3534ad35f.js",
+        "webview/assets/app-initial-c014f9ee4429.js"
+      ]
+    },
+    {
+      "id": "startup-watchdog",
+      "stage": "history",
+      "files": [
+        "out/extension.js"
+      ]
+    },
+    {
+      "id": "native-tab-titles",
+      "stage": "titles",
+      "files": [
+        "out/extension.js",
+        "webview/assets/app-initial-c014f9ee4429.js"
+      ]
+    },
+    {
+      "id": "project-model",
+      "stage": "workflow",
+      "files": [
+        "out/extension.js",
+        "webview/assets/app-initial-c014f9ee4429.js"
+      ]
+    },
+    {
+      "id": "tab-status",
+      "stage": "workflow",
+      "files": [
+        "out/extension.js"
+      ]
+    },
+    {
+      "id": "workflow-notifications",
+      "stage": "workflow",
+      "files": [
+        "out/extension.js"
+      ]
+    },
+    {
+      "id": "independent-drafts",
+      "stage": "drafts",
+      "files": [
+        "webview/assets/app-initial-c014f9ee4429.js",
+        "webview/assets/app-initial-7a199c66e670.js"
+      ]
+    }
+  ]
+}

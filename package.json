@@ -1,0 +1,208 @@
+{
+  "name": "codex-companion",
+  "version": "0.2.6",
+  "private": true,
+  "description": "%description%",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/core/*.test.js test/core/*.test.cjs",
+    "probe": "npm run build && node dist/scripts/probe.js",
+    "test:host": "npm run build && node dist/scripts/testOfficialHost.js",
+    "test:official": "npm run build && node dist/scripts/testOfficialHost.js --real",
+    "package": "npm run build && vsce package --allow-missing-repository --skip-license --out .artifacts/codex-companion-0.2.6.vsix",
+    "test:launcher": "npm run build && node dist/scripts/testLauncherUi.js",
+    "patches:check": "node scripts/companionPatches.cjs check",
+    "patches:install": "node scripts/companionPatches.cjs install",
+    "patches:restore": "node scripts/companionPatches.cjs restore"
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
+    "vscode": "^1.139.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.96.0",
+    "@vscode/vsce": "4.0.0",
+    "playwright-core": "1.64.1",
+    "typescript": "7.0.2"
+  },
+  "displayName": "%displayName%",
+  "publisher": "local-companion",
+  "main": "./dist/src/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onWebviewPanel:codexCompanion.chat"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "icons": {
+      "codex-companion-logo": {
+        "description": "Codex",
+        "default": {
+          "fontPath": "./resources/codex-companion.woff",
+          "fontCharacter": "\\E001"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "codexCompanion.menu",
+        "category": "Codex",
+        "title": "%menu%"
+      },
+      {
+        "command": "codexCompanion.usage",
+        "category": "Codex",
+        "title": "%usage%",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "codexCompanion.reopenClosed",
+        "category": "Codex",
+        "title": "%reopenClosed%",
+        "icon": "$(history)"
+      },
+      {
+        "command": "codexCompanion.projectHistory",
+        "category": "Codex",
+        "title": "%projectHistory%",
+        "icon": "$(history)"
+      },
+      {
+        "command": "codexCompanion.openProjectEnvironment",
+        "category": "Codex",
+        "title": "%openProjectEnvironment%"
+      },
+      {
+        "command": "codexCompanion.refreshTitle",
+        "category": "Codex",
+        "title": "%refreshTitle%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "codexCompanion.open",
+        "category": "Codex",
+        "title": "%open%",
+        "icon": {
+          "light": "resources/codex-black.svg",
+          "dark": "resources/codex-white.svg"
+        }
+      },
+      {
+        "command": "codexCompanion.refreshQuotas",
+        "category": "Codex",
+        "title": "%refreshQuotas%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "codexCompanion.checkCompatibility",
+        "category": "Codex",
+        "title": "%checkCompatibility%"
+      },
+      {
+        "command": "codexCompanion.installPatch",
+        "category": "Codex",
+        "title": "%installPatch%"
+      },
+      {
+        "command": "codexCompanion.restorePatch",
+        "category": "Codex",
+        "title": "%restorePatch%"
+      },
+      {
+        "command": "codexCompanion.openChats",
+        "category": "Codex",
+        "title": "%openChats%",
+        "icon": "$(list-selection)"
+      },
+      {
+        "command": "codexCompanion.nextWaitingChat",
+        "category": "Codex",
+        "title": "%nextWaitingChat%"
+      },
+      {
+        "command": "codexCompanion.nextAttentionChat",
+        "category": "Codex",
+        "title": "%nextAttentionChat%"
+      },
+      {
+        "command": "codexCompanion.openLegacyDraft",
+        "category": "Codex",
+        "title": "%openLegacyDraft%"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "codexCompanion.menu",
+          "when": "false"
+        },
+        {
+          "command": "codexCompanion.refreshTitle"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "codexCompanion.open",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codexCompanion.projectHistory",
+          "group": "navigation@2"
+        },
+        {
+          "command": "codexCompanion.openChats",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Codex Companion",
+      "properties": {
+        "codexCompanion.cliPath": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "restricted": true,
+          "description": "%cliPath%"
+        },
+        "codexCompanion.notifications": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "%notifications%"
+        },
+        "codexCompanion.windowsNotifications": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "%windowsNotifications%"
+        },
+        "codexCompanion.notificationSound": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "%notificationSound%"
+        }
+      }
+    }
+  },
+  "license": "UNLICENSED",
+  "extensionDependencies": [
+    "openai.chatgpt"
+  ],
+  "dependencies": {
+    "node-notifier": "11.0.0"
+  }
+}

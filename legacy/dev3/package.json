@@ -1,0 +1,123 @@
+{
+  "name": "codex-companion",
+  "version": "0.1.0-dev.3",
+  "private": true,
+  "description": "%description%",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/core/*.test.js",
+    "probe": "npm run build && node dist/scripts/probe.js",
+    "test:host": "npm run build && node dist/scripts/testHost.js",
+    "test:live": "npm run build && node dist/scripts/smokeChat.js",
+    "package": "npm run build && vsce package --allow-missing-repository --skip-license --out .artifacts/codex-companion-0.1.0-dev.3.vsix",
+    "test:ui": "npm run build && node dist/scripts/testUi.js",
+    "test:notification": "npm run build && node dist/scripts/testNotification.js",
+    "test:workbench": "npm run build && node dist/scripts/testWorkbench.js",
+    "test:history": "npm run build && node dist/scripts/testHistory.js",
+    "test:notification-focus": "npm run build && node dist/scripts/testNotificationFocus.js --manual",
+    "test:toast-click": "npm run build && node dist/scripts/testToastClick.js --manual"
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
+    "vscode": "^1.139.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/node-notifier": "8.0.5",
+    "@types/vscode": "1.96.0",
+    "@vscode/vsce": "4.0.0",
+    "playwright-core": "1.64.1",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "node-notifier": "11.0.0"
+  },
+  "displayName": "%displayName%",
+  "publisher": "local-companion",
+  "main": "./dist/src/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onWebviewPanel:codexCompanion.chat"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "codexCompanion.open",
+        "category": "Codex",
+        "title": "%open%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "codexCompanion.rename",
+        "category": "Codex",
+        "title": "%rename%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "codexCompanion.history",
+        "category": "Codex",
+        "title": "%history%",
+        "icon": "$(history)"
+      },
+      {
+        "command": "codexCompanion.refreshQuotas",
+        "category": "Codex",
+        "title": "%refreshQuotas%",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "codexCompanion.open",
+          "group": "navigation@10"
+        },
+        {
+          "command": "codexCompanion.rename",
+          "when": "activeWebviewPanelId == codexCompanion.chat",
+          "group": "navigation@11"
+        },
+        {
+          "command": "codexCompanion.history",
+          "when": "activeWebviewPanelId == codexCompanion.chat",
+          "group": "navigation@12"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Codex Companion",
+      "properties": {
+        "codexCompanion.cliPath": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "restricted": true,
+          "description": "%cliPath%"
+        },
+        "codexCompanion.windowsNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "%windowsNotifications%"
+        },
+        "codexCompanion.notificationSound": {
+          "type": "boolean",
+          "default": false,
+          "description": "%notificationSound%"
+        }
+      }
+    }
+  },
+  "license": "UNLICENSED"
+}

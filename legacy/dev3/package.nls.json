@@ -1,0 +1,11 @@
+{
+  "displayName": "Codex Companion",
+  "description": "Project chat tabs, quotas and notifications for Codex.",
+  "open": "Open",
+  "rename": "Rename Tab",
+  "history": "History",
+  "refreshQuotas": "Refresh Quotas",
+  "cliPath": "Path to the Codex CLI executable. Empty uses the official extension's bundled CLI, then PATH.",
+  "windowsNotifications": "Show Windows notifications when this VS Code window is in the background.",
+  "notificationSound": "Play a sound with Windows notifications."
+}

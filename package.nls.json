@@ -1,0 +1,23 @@
+{
+  "displayName": "Codex Companion",
+  "description": "Open the official Codex interface and show account quotas.",
+  "open": "Open Window",
+  "menu": "Windows and Quotas",
+  "usage": "Usage Report",
+  "reopenClosed": "Reopen Closed Window",
+  "projectHistory": "Project History",
+  "openProjectEnvironment": "Open Project with Separate History",
+  "refreshTitle": "Refresh Window Title",
+  "refreshQuotas": "Refresh Quotas",
+  "checkCompatibility": "Check Codex Compatibility",
+  "notifications": "Show status notifications for completed, failed, or waiting Codex tasks.",
+  "windowsNotifications": "Show Windows toast notifications while VS Code is in the background.",
+  "notificationSound": "Play a sound when a Codex task finishes or needs your answer.",
+  "cliPath": "Path to the Codex CLI executable. Empty uses the official extension's bundled CLI, then PATH.",
+  "installPatch": "Install / Update Companion Enhancements",
+  "restorePatch": "Restore Original Codex Files",
+  "openChats": "Open Chats",
+  "nextWaitingChat": "Focus Next Waiting Chat",
+  "nextAttentionChat": "Focus Next Chat Needing Attention",
+  "openLegacyDraft": "Open Previous Shared Draft"
+}

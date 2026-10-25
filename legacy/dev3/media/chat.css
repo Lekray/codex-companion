@@ -1,0 +1,23 @@
+:root { color-scheme: light dark; }
+body { max-width: 960px; margin: 0 auto; padding: 20px 24px; color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
+header { color: var(--vscode-descriptionForeground); border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 12px; }
+article, details { margin: 18px 0; }
+h2 { font-size: 12px; color: var(--vscode-descriptionForeground); font-weight: 600; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; }
+details pre { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); }
+summary { cursor: pointer; color: var(--vscode-descriptionForeground); }
+.user { border-left: 2px solid var(--vscode-focusBorder); padding-left: 16px; }
+.system { color: var(--vscode-errorForeground); }
+#composer { position: sticky; bottom: 0; padding: 14px 0 8px; background: var(--vscode-editor-background); }
+textarea, input { width: 100%; box-sizing: border-box; padding: 10px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: 4px; font: inherit; }
+textarea { resize: vertical; min-height: 72px; }
+textarea:focus, input:focus, button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.hint { color: var(--vscode-descriptionForeground); margin-right: auto; font-size: 11px; }
+button { cursor: pointer; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 3px; padding: 7px 12px; font: inherit; }
+button:hover { background: var(--vscode-button-hoverBackground); }
+button:disabled { opacity: .5; cursor: default; }
+.prompt { border: 1px solid var(--vscode-focusBorder); padding: 12px; margin: 12px 0; border-radius: 4px; }
+.prompt button { margin: 5px 5px 0 0; }
+.prompt label { display: block; margin: 12px 0; }
+.prompt input { margin-top: 6px; }

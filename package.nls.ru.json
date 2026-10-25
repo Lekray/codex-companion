@@ -1,0 +1,23 @@
+{
+  "displayName": "Codex Companion",
+  "description": "Открытие официального интерфейса Codex и отображение квот аккаунта.",
+  "open": "Открыть окно",
+  "menu": "Окна и лимиты",
+  "usage": "Отчёт по лимитам",
+  "reopenClosed": "Вернуть закрытое окно",
+  "projectHistory": "История проекта",
+  "openProjectEnvironment": "Открыть проект с отдельной историей",
+  "refreshTitle": "Обновить название окна",
+  "refreshQuotas": "Обновить квоты",
+  "checkCompatibility": "Проверить совместимость Codex",
+  "notifications": "Показывать уведомления о завершении, ошибке или ожидании задач Codex.",
+  "windowsNotifications": "Показывать уведомления Windows, когда VS Code находится в фоне.",
+  "notificationSound": "Проигрывать звук, когда задача Codex завершена или нужен ваш ответ.",
+  "cliPath": "Путь к исполняемому файлу Codex CLI. Если пусто — CLI официального расширения, затем PATH.",
+  "installPatch": "Установить / обновить дополнения Companion",
+  "restorePatch": "Восстановить исходные файлы Codex",
+  "openChats": "Открытые чаты",
+  "nextWaitingChat": "Перейти к следующему ожидающему чату",
+  "nextAttentionChat": "Перейти к следующему чату, требующему внимания",
+  "openLegacyDraft": "Открыть прежний общий черновик"
+}

@@ -1,0 +1,24 @@
+{
+  "schema": 3,
+  "officialVersion": "26.1021.22027",
+  "features": [
+    "project-history",
+    "startup-watchdog",
+    "native-tab-titles",
+    "project-model",
+    "tab-status",
+    "workflow-notifications",
+    "independent-drafts"
+  ],
+  "files": {
+    "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
+    "out/extension.js": "cce0ffbcbf663125275632e484556dc4bea27dd99df8e57b05348c9f289f4f67",
+    "webview/assets/src-622b307a9baf.js": "aa54b2c189367a50541a7ea27b3cfe05d5c476588d657f63543ce8eac681fdb2",
+    "webview/assets/initialize-app-host-services.extension-f722db488e05.js": "b7591760d7d1ca8ab64644151f2997617ac77d0ba9ccc139dd3881b59fe1f73c",
+    "webview/assets/local-conversation-page-e49199d4fdb5.js": "4a5b4d7414669edf6a57420f1ea3186fba9f505c0d4bc9491e528acf9f0bbcd1",
+    "webview/assets/message-bus-4113ba7287d7.js": "aae9bcfd81a37be141675a79ea670572fb8b7e041c2debddfacadc657c500db8",
+    "webview/assets/use-model-settings-aafcff4b111c.js": "4ed17b3232091dd85537be18301ab1bd3e9d7711b9524cc2444de7a201053f74",
+    "webview/assets/composer-content-8ab21f1a1982.js": "a3b91dee9230ab94d1518c90dc63e83d5284dba4b468ba0a58c2f68bb8c49cdc",
+    "webview/assets/composer-scope-f0dbf0e746b6.js": "79227c2014dd9a11ed1d2ab8ed6428723626245bea2791cc7b6af02b5d57507d"
+  }
+}
