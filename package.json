@@ -1,6 +1,6 @@
 {
   "name": "codex-companion",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "description": "%description%",
   "scripts": {
@@ -9,7 +9,7 @@
     "probe": "npm run build && node dist/scripts/probe.js",
     "test:host": "npm run build && node dist/scripts/testOfficialHost.js",
     "test:official": "npm run build && node dist/scripts/testOfficialHost.js --real",
-    "package": "npm run build && vsce package --allow-missing-repository --skip-license --out .artifacts/codex-companion-0.2.8.vsix",
+    "package": "npm run build && vsce package --allow-missing-repository --skip-license --out .artifacts/codex-companion-0.2.9.vsix",
     "test:launcher": "npm run build && node dist/scripts/testLauncherUi.js",
     "patches:check": "node scripts/companionPatches.cjs check",
     "patches:install": "node scripts/companionPatches.cjs install",

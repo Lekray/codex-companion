@@ -95,13 +95,31 @@ test("per-stage unaffected files are returned unchanged", () => {
 
 test("status runtime aliases are rewritten for the new host", () => {
   const core = adapter.statusCoreSource();
-  assert.ok(core.includes("Be.commands"));
-  assert.ok(core.includes("Be.workspace"));
-  assert.ok(core.includes("typeof fv === \"function\""));
-  assert.ok(core.includes("typeof jje === \"function\""));
-  assert.doesNotMatch(core, /\bje\b/);
-  assert.doesNotMatch(core, /\bcR\b/);
-  assert.doesNotMatch(core, /\bTKe\b/);
+  const v2At = core.indexOf("function __companionWorkflowStateKey()");
+  assert.ok(v2At > 0);
+  const runtime = core.slice(v2At);
+  assert.ok(runtime.includes("Be.commands"));
+  assert.ok(runtime.includes("Be.workspace"));
+  assert.ok(runtime.includes("typeof fv === \"function\""));
+  assert.ok(runtime.includes("typeof jje === \"function\""));
+  assert.doesNotMatch(runtime, /\bje\b/);
+  assert.doesNotMatch(runtime, /\bcR\b/);
+  assert.doesNotMatch(runtime, /\bTKe\b/);
+});
+
+test("status core injects the frozen question-history globals before V2", () => {
+  const core = adapter.statusCoreSource();
+  const projected = core.indexOf("__companionQuestionProject");
+  const candidates = core.indexOf("__companionQuestionCandidates");
+  const create = core.indexOf("__companionCreateQuestionHistory");
+  const v2At = core.indexOf("function __companionWorkflowStateKey()");
+  assert.ok(projected >= 0, "question projection helper is missing");
+  assert.ok(candidates > projected, "question candidates helper is missing");
+  assert.ok(create > candidates, "question history factory is missing");
+  assert.ok(v2At > create, "question history must precede the V2 runtime");
+  assert.ok(core.includes("__companionCreateQuestionHistory({"));
+  assert.ok(core.includes("history.receive(record, result, null)"));
+  assert.ok(core.includes("history.disposeWebview(webview)"));
 });
 
 test("model runtime roots alias is rewritten for the new host", () => {
@@ -178,8 +196,13 @@ test("workflow hydration observes only the existing thread/read request/response
     assert.equal(workflow.split(marker).length - 1, 1, marker);
   }
   assert.ok(
-    workflow.includes('if (request == null || typeof request !== "object" || request.method !== "thread/read") return null;')
+    workflow.includes('method === "thread/read" ||') &&
+      workflow.includes('method === "thread/resume" ||') &&
+      workflow.includes('method === "thread/turns/list" ||') &&
+      workflow.includes('method === "thread/items/list"')
   );
+  assert.ok(workflow.includes("runtime.history.track(record)"));
+  assert.ok(workflow.includes("runtime.history.receive(record, result, null)"));
   assert.ok(workflow.includes("function __companionWorkflowSetStatusSilent"));
   assert.ok(workflow.includes("live: live !== false"));
   assert.ok(workflow.includes("thread.liveEpoch = (thread.liveEpoch || 0) + 1"));

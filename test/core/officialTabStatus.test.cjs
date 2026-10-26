@@ -26,9 +26,11 @@ const PATCHED_HOST = status.applyStatusTransforms(HOST, BASE_HOST);
 function createVscode() {
   const handlers = new Map();
   const calls = [];
+  const foldersHandlers = [];
   return {
     handlers,
     calls,
+    foldersHandlers,
     commands: {
       registerCommand(id, handler) {
         handlers.set(id, handler);
@@ -44,7 +46,8 @@ function createVscode() {
       },
     },
     workspace: {
-      onDidChangeWorkspaceFolders() {
+      onDidChangeWorkspaceFolders(handler) {
+        if (typeof handler === "function") foldersHandlers.push(handler);
         return { dispose() {} };
       },
     },
@@ -82,6 +85,12 @@ function createContext(options = {}) {
 
 function evaluateCore({ je, roots, model }) {
   const source = fs.readFileSync(path.join(ROOT, "resources", "officialTabStatusV2.js"), "utf8");
+  // The frozen pure assembler is injected before V2 in the real adapter. Read
+  // it at test runtime only; this worker never loads or inspects it.
+  const questionHistory = fs.readFileSync(
+    path.join(ROOT, "resources", "officialQuestionHistory.js"),
+    "utf8"
+  );
   const modelSource =
     model === undefined
       ? ""
@@ -90,7 +99,9 @@ function evaluateCore({ je, roots, model }) {
     "je",
     "cR",
     "TKe",
-    source +
+    questionHistory +
+      "\n" +
+      source +
       "\n" +
       modelSource +
       "\nreturn {" +
@@ -104,18 +115,30 @@ function evaluateCore({ je, roots, model }) {
       "forgetWebviewReads:__companionWorkflowForgetWebviewReads," +
       "stateKey:__companionWorkflowStateKey};"
   );
-  return factory(je, () => roots.slice(), (value) => (value.length > 30 ? value.slice(0, 30) + "\u2026" : value));
+  const rootsProvider = typeof roots === "function" ? roots : () => roots.slice();
+  return factory(je, rootsProvider, (value) => (value.length > 30 ? value.slice(0, 30) + "\u2026" : value));
 }
 
 function createHarness(options = {}) {
   const je = createVscode();
   const context = createContext(options);
-  const roots = options.roots || ["C:\\Project"];
+  let roots = (options.roots || ["C:\\Project"]).slice();
   if (options.saved !== undefined) {
     context.store.set("codexCompanion.official.v1.status", JSON.parse(JSON.stringify(options.saved)));
   }
-  const api = evaluateCore({ je, roots, model: options.model });
-  return { je, context, api, roots, resolveRestore: () => context.resolvePendingGets() };
+  const api = evaluateCore({ je, roots: () => roots.slice(), model: options.model });
+  return {
+    je,
+    context,
+    api,
+    get roots() {
+      return roots;
+    },
+    setRoots(next) {
+      roots = next.slice();
+    },
+    resolveRestore: () => context.resolvePendingGets(),
+  };
 }
 
 function makeProvider() {
@@ -220,6 +243,16 @@ function questionItem(method, turnId, itemId) {
 }
 
 function userMessageItem(method, turnId, itemId) {
+  const digits = String(itemId).replace(/^(answer|prompt)/, "") || "1";
+  const questionItemId = JSON.stringify([
+    "request_user_input_async",
+    "question" + digits,
+    0,
+  ]);
+  const envelope =
+    "<send_user_message_question_reply>" +
+    JSON.stringify({ questionItemId, question: "Q", answer: "A" }) +
+    "</send_user_message_question_reply>";
   return {
     method,
     params: {
@@ -229,7 +262,43 @@ function userMessageItem(method, turnId, itemId) {
         id: itemId,
         type: "userMessage",
         clientId: null,
-        content: [{ type: "text", text: "Option A", text_elements: [] }],
+        content: [{ type: "text", text: envelope, text_elements: [] }],
+      },
+    },
+  };
+}
+
+function plainUserMessageItem(method, turnId, itemId, text) {
+  return {
+    method,
+    params: {
+      threadId: "t1",
+      turnId,
+      item: {
+        id: itemId,
+        type: "userMessage",
+        clientId: null,
+        content: [{ type: "text", text: text || "ordinary input", text_elements: [] }],
+      },
+    },
+  };
+}
+
+function steeringMessageItem(method, turnId, itemId, status, questionItemId) {
+  const envelope =
+    "<send_user_message_question_reply>" +
+    JSON.stringify({ questionItemId, question: "Q", answer: "A" }) +
+    "</send_user_message_question_reply>";
+  return {
+    method,
+    params: {
+      threadId: "t1",
+      turnId,
+      item: {
+        id: itemId,
+        type: "steeringUserMessage",
+        status,
+        input: [{ type: "text", text: envelope }],
       },
     },
   };
@@ -860,11 +929,11 @@ test("a user message seen before its question cannot clear that question on a la
   bind(api, provider, panel, { id: "w1" }, "t1", "Alpha");
 
   api.notify(provider, started("turn1", 10));
-  api.notify(provider, userMessageItem("item/started", "turn1", "prompt1"));
+  api.notify(provider, plainUserMessageItem("item/started", "turn1", "prompt1", "Original prompt"));
   api.notify(provider, questionItem("item/started", "turn1", "question1"));
   assert.strictEqual(panel.title, "[?] Alpha");
 
-  api.notify(provider, userMessageItem("item/completed", "turn1", "prompt1"));
+  api.notify(provider, plainUserMessageItem("item/completed", "turn1", "prompt1", "Original prompt"));
   assert.strictEqual(panel.title, "[?] Alpha");
   api.notify(provider, questionItem("item/completed", "turn1", "question1"));
   assert.strictEqual(panel.title, "[?] Alpha");
@@ -1230,7 +1299,7 @@ test("full turns hydrate inProgress, completed, failed and interrupted", () => {
     api.readResponse(
       provider,
       webview,
-      readResponse("r2", readThread("t1", { type: "idle" }, [{ id: "turn1", status: "completed", startedAt: 10 }]))
+      readResponse("r2", readThread("t1", { type: "idle" }, [{ id: "turn1", status: "completed", startedAt: 10, items: [] }]))
     ),
     true
   );
@@ -1255,7 +1324,7 @@ test("full turns hydrate inProgress, completed, failed and interrupted", () => {
     api.readResponse(
       provider,
       webview,
-      readResponse("r3", readThread("t1", { type: "idle" }, [{ id: "turn2", status: "failed", startedAt: 20 }]))
+      readResponse("r3", readThread("t1", { type: "idle" }, [{ id: "turn2", status: "failed", startedAt: 20, items: [] }]))
     ),
     true
   );
@@ -1266,7 +1335,7 @@ test("full turns hydrate inProgress, completed, failed and interrupted", () => {
     api.readResponse(
       provider,
       webview,
-      readResponse("r4", readThread("t1", { type: "idle" }, [{ id: "turn3", status: "interrupted", startedAt: 30 }]))
+      readResponse("r4", readThread("t1", { type: "idle" }, [{ id: "turn3", status: "interrupted", startedAt: 30, items: [] }]))
     ),
     true
   );
@@ -1278,7 +1347,7 @@ test("full turns hydrate inProgress, completed, failed and interrupted", () => {
     api.readResponse(
       provider,
       webview,
-      readResponse("r5", readThread("t1", { type: "idle" }, [{ id: "turn4", status: "cancelled", startedAt: 40 }]))
+      readResponse("r5", readThread("t1", { type: "idle" }, [{ id: "turn4", status: "cancelled", startedAt: 40, items: [] }]))
     ),
     true
   );
@@ -1373,7 +1442,9 @@ test("in-progress questions wait, later user messages settle, completed question
     true
   );
   assert.strictEqual(panel.title, "[?] Alpha");
-  assert.strictEqual(runtime.threads.t1.completedTurnId, null);
+  assert.strictEqual(runtime.threads.t1.completedTurnId, "turn2");
+  assert.strictEqual(runtime.threads.t1.questionClosedTurnId, "turn2");
+  assert.strictEqual(runtime.threads.t1.doneEmittedFor, null);
   assert.strictEqual(statusEvents(je, "done").length, 0);
 
   // Completed with a later answer: done is safe.
@@ -1406,7 +1477,7 @@ test("out-of-order reads apply newest first and drop the stale response", () => 
     api.readResponse(
       provider,
       webview,
-      readResponse("r2", readThread("t1", { type: "idle" }, [{ id: "turn2", status: "completed", startedAt: 20 }]))
+      readResponse("r2", readThread("t1", { type: "idle" }, [{ id: "turn2", status: "completed", startedAt: 20, items: [] }]))
     ),
     true
   );
@@ -1629,4 +1700,585 @@ test("async persisted restore cannot overwrite a hydrated live status", async ()
   assert.strictEqual(runtime.threads.t1.turnId, null);
   assert.strictEqual(runtime.threads.t1.completedTurnId, null);
   assert.strictEqual(je.handlers.get("chatgpt.companion.v1.getState")().tabs[0].status, "waiting");
+});
+
+// ---------------------------------------------------------------------------
+// Resume / paginated question history (existing native traffic only)
+// ---------------------------------------------------------------------------
+
+function nativeQuestionItem(itemId, count) {
+  const questions = [];
+  for (let i = 0; i < count; i += 1) {
+    questions.push({ title: "Question " + i, options: ["A", "B"] });
+  }
+  return {
+    id: itemId,
+    type: "agentMessage",
+    text: "Which option?",
+    phase: null,
+    memoryCitation: null,
+    delivery: "async",
+    questions,
+  };
+}
+
+function nativePromptItem(itemId, text) {
+  return {
+    id: itemId,
+    type: "userMessage",
+    clientId: null,
+    content: [{ type: "text", text: text || "Do the thing" }],
+  };
+}
+
+function nativeReplyItem(itemId, questionItemId, index, answer) {
+  const envelope =
+    "<send_user_message_question_reply>" +
+    JSON.stringify({
+      questionItemId: JSON.stringify(["request_user_input_async", questionItemId, index]),
+      question: "Question " + index,
+      answer: answer || "A",
+    }) +
+    "</send_user_message_question_reply>";
+  return {
+    id: itemId,
+    type: "userMessage",
+    clientId: null,
+    content: [{ type: "text", text: envelope }],
+  };
+}
+
+function turnPage(items, nextCursor, options) {
+  const page = {
+    data: [
+      {
+        id: (options && options.turnId) || "rollout-3",
+        status: (options && options.status) || "completed",
+        startedAt: options && "startedAt" in options ? options.startedAt : null,
+        itemsView: "full",
+        itemsCount: items.length,
+        items,
+      },
+    ],
+    backwardsCursor: "backwards",
+  };
+  if (!(options && options.omitNextCursor)) {
+    page.nextCursor = nextCursor === undefined ? null : nextCursor;
+  }
+  return page;
+}
+
+function resumeResponse(id, page, turns) {
+  return {
+    id,
+    result: {
+      thread: { id: "t1", hostId: "local", status: { type: "idle" }, turns: turns || [] },
+      initialTurnsPage: page,
+    },
+    error: null,
+  };
+}
+
+function historyHarness(options = {}) {
+  const h = createHarness(options);
+  h.provider = makeProvider();
+  h.webview = { id: "w1" };
+  h.panel = h.provider.add({ title: "Codex" }, h.webview);
+  h.api.install(h.provider, h.context);
+  bind(h.api, h.provider, h.panel, h.webview, "t1", "Alpha");
+  h.runtime = h.provider.__companionWorkflowRuntime;
+  h.track = (request) => h.api.trackRead(h.provider, h.webview, request);
+  h.respond = (response) => h.api.readResponse(h.provider, h.webview, response);
+  h.resume = (id, page, turns) => {
+    h.track({
+      id,
+      method: "thread/resume",
+      params: {
+        threadId: "t1",
+        excludeTurns: true,
+        initialTurnsPage: { limit: 5, itemsView: "full", sortDirection: "desc" },
+      },
+    });
+    return h.respond(resumeResponse(id, page, turns));
+  };
+  return h;
+}
+
+test("invalid cursors/directions survive sanitization as invalid rather than becoming latest roots",()=>{
+ for(const bad of [{cursor:{type:"unknown",itemId:"x"}},{cursor:100},{sortDirection:"unknown"}]){
+  const h=historyHarness();h.track({id:"bad",method:"thread/turns/list",params:{threadId:"t1",cursor:null,itemsView:"full",sortDirection:"desc",...bad}});
+  assert.strictEqual(h.respond({id:"bad",result:turnPage([nativeQuestionItem("q",1)]),error:null}),false);
+  assert.strictEqual(h.panel.title,"Alpha");
+ }
+});
+
+test("load-only native idle during resume does not discard complete cold question evidence",()=>{
+ for(const status of ["idle","done"]){
+  const h=historyHarness({saved:{version:1,roots:["C:\\Project"],threads:{t1:{status,turnId:"rollout-3",completedTurnId:status==="done"?"rollout-3":null,updatedAt:10}}}});
+  h.track({id:"native",method:"thread/resume",params:{threadId:"t1",excludeTurns:true,initialTurnsPage:{itemsView:"full",sortDirection:"desc"}}});
+  h.api.notify(h.provider,{method:"thread/status/changed",params:{threadId:"t1",status:{type:"idle"}}});
+  assert.strictEqual(h.respond(resumeResponse("native",turnPage([nativeQuestionItem("q",2)]))),true);
+  assert.strictEqual(h.panel.title,"[?] Alpha");
+ }
+});
+
+test("new inProgress evidence retains known partial answers across reset and duplicate question events",()=>{
+ const h=historyHarness({saved:{version:1,roots:["C:\\Project"],threads:{t1:{status:"idle",turnId:"old",completedTurnId:null,updatedAt:10}}}});
+ const question=nativeQuestionItem("q",2);
+ assert.strictEqual(h.resume("partial-new",turnPage([question,nativeReplyItem("a0","q",0)],null,{turnId:"new",status:"inProgress"})),true);
+ h.api.notify(h.provider,{method:"item/completed",params:{threadId:"t1",turnId:"new",item:question}});
+ h.api.notify(h.provider,{method:"item/started",params:{threadId:"t1",turnId:"new",item:nativeReplyItem("a1","q",1)}});
+ assert.strictEqual(h.runtime.threads.t1.asyncQuestionCount,0);assert.strictEqual(h.panel.title,"[~] Alpha");
+});
+
+test("live terminal without a timestamp wins a different unorderable history turn",()=>{
+ const h=historyHarness();h.api.notify(h.provider,started("live",null));h.api.notify(h.provider,completed("live",null,"completed"));
+ assert.strictEqual(h.resume("stale-different",turnPage([nativeQuestionItem("q",1)],null,{turnId:"old",startedAt:10})),false);
+ assert.strictEqual(h.panel.title,"[V] Alpha");
+});
+
+test("a later complete read prevents an old paged root from resurrecting an answered question",()=>{
+ const h=historyHarness();h.track({id:"root-old",method:"thread/turns/list",params:{threadId:"t1",cursor:null,sortDirection:"desc",itemsView:"notLoaded"}});
+ h.respond({id:"root-old",result:{data:[{id:"turn",status:"completed",startedAt:10,itemsView:"notLoaded",items:[]}],nextCursor:null}});
+ h.track(readRequest("new-full","t1",true));assert.strictEqual(h.respond(readResponse("new-full",readThread("t1",{type:"idle"},[{id:"turn",status:"completed",startedAt:10,itemsView:"full",items:[]}]))),true);
+ h.track({id:"items-old",method:"thread/items/list",params:{threadId:"t1",turnId:"turn",cursor:null,sortDirection:"desc"}});
+ assert.strictEqual(h.respond({id:"items-old",result:{data:[{turnId:"turn",item:nativeQuestionItem("q",1)}],nextCursor:null}}),false);
+ assert.strictEqual(h.panel.title,"[V] Alpha");
+});
+
+test("normal resume.initialTurnsPage with startedAt:null restores a cold waiting question", () => {
+  const saved = {
+    version: 1,
+    roots: ["C:\\Project"],
+    threads: {
+      t1: { status: "waiting", turnId: "rollout-2", goalStatus: null, completedTurnId: null, updatedAt: 5 },
+    },
+  };
+  const h = historyHarness({ saved });
+  assert.strictEqual(h.panel.title, "Alpha");
+  assert.strictEqual(
+    h.resume("resume-1", turnPage([nativePromptItem("item-1"), nativeQuestionItem("q1", 1)])),
+    true
+  );
+  assert.strictEqual(h.panel.title, "[?] Alpha");
+  const thread = h.runtime.threads.t1;
+  assert.strictEqual(thread.status, "waiting");
+  assert.strictEqual(thread.turnId, "rollout-3");
+  assert.strictEqual(thread.turnStartedAt, null);
+  assert.strictEqual(thread.turnActive, false);
+  assert.strictEqual(thread.completedTurnId, "rollout-3");
+  assert.strictEqual(thread.questionClosedTurnId, "rollout-3");
+  assert.strictEqual(thread.doneEmittedFor, null);
+  assert.strictEqual(thread.asyncQuestionCount, 1);
+  assert.strictEqual(thread.asyncQuestions["rollout-3|q1"].questionKeys.length, 1);
+  const silent = snapshotEvents(h.je);
+  assert.strictEqual(silent.length, 1);
+  assert.strictEqual(silent[0].tab.status, "waiting");
+  assert.strictEqual(events(h.je).filter((event) => event.live !== false).length, 0);
+  const savedText = JSON.stringify(h.context.store.get(h.api.stateKey()));
+  assert.ok(!savedText.includes("Which option"));
+  assert.ok(!savedText.includes("Question 0"));
+  assert.ok(!savedText.includes("questionKeys"));
+  assert.ok(!savedText.includes("questions"));
+});
+
+test("proven complete resumed questions update silently: partial reply waits, final reply is silent done", () => {
+  const h = historyHarness();
+  assert.strictEqual(
+    h.resume("resume-1", turnPage([
+      nativeQuestionItem("q1", 2),
+      nativeReplyItem("a0", "q1", 0),
+    ])),
+    true
+  );
+  assert.strictEqual(h.panel.title, "[?] Alpha");
+  let thread = h.runtime.threads.t1;
+  assert.strictEqual(thread.asyncQuestionCount, 1);
+  assert.strictEqual(thread.asyncQuestions["rollout-3|q1"].questionKeys.length, 1);
+  assert.strictEqual(thread.doneEmittedFor, null);
+  assert.strictEqual(statusEvents(h.je, "done").length, 0);
+
+  assert.strictEqual(
+    h.resume("resume-2", turnPage([
+      nativeQuestionItem("q1", 2),
+      nativeReplyItem("a0", "q1", 0),
+      nativeReplyItem("a1", "q1", 1),
+    ])),
+    true
+  );
+  thread = h.runtime.threads.t1;
+  assert.strictEqual(h.panel.title, "[V] Alpha");
+  assert.strictEqual(thread.asyncQuestionCount, 0);
+  assert.strictEqual(thread.doneEmittedFor, "rollout-3");
+  const done = statusEvents(h.je, "done");
+  assert.strictEqual(done.length, 1);
+  assert.strictEqual(done[0].live, false);
+});
+
+test("legacy resume without excludeTurns adopts a complete full-turn question snapshot", () => {
+  const h = historyHarness();
+  h.track({
+    id: "legacy",
+    method: "thread/resume",
+    params: { threadId: "t1", excludeTurns: false },
+  });
+  assert.strictEqual(
+    h.respond({
+      id: "legacy",
+      result: {
+        thread: {
+          id: "t1",
+          hostId: "local",
+          status: { type: "idle" },
+          turns: [
+            {
+              id: "turn-legacy",
+              status: "completed",
+              startedAt: 10,
+              itemsView: "full",
+              items: [nativeQuestionItem("q1", 1)],
+            },
+          ],
+        },
+      },
+      error: null,
+    }),
+    true
+  );
+  assert.strictEqual(h.panel.title, "[?] Alpha");
+  assert.strictEqual(h.runtime.threads.t1.completedTurnId, "turn-legacy");
+  assert.strictEqual(h.runtime.threads.t1.questionClosedTurnId, "turn-legacy");
+  assert.strictEqual(h.runtime.threads.t1.doneEmittedFor, null);
+  assert.strictEqual(statusEvents(h.je, "done").length, 0);
+});
+
+test("read records keep only sanitized pagination params, never request content", () => {
+  const h = historyHarness();
+  h.track({
+    id: "sanitize",
+    method: "thread/resume",
+    params: {
+      threadId: "t1",
+      excludeTurns: true,
+      initialTurnsPage: {
+        limit: 5,
+        itemsView: "full",
+        sortDirection: "desc",
+        cursor: null,
+        content: "SECRET CONTENT",
+      },
+      content: "SECRET CONTENT",
+      config: { sandbox: "SECRET CONFIG" },
+    },
+  });
+  const record = h.runtime.reads.sanitize;
+  assert.ok(record);
+  assert.deepStrictEqual(Object.keys(record.params.initialTurnsPage).sort(), [
+    "cursor",
+    "itemsView",
+    "limit",
+    "sort",
+    "sortDirection",
+  ]);
+  assert.strictEqual(record.params.initialTurnsPage.cursor, null);
+  assert.strictEqual(record.params.excludeTurns, true);
+  const serialized = JSON.stringify(record);
+  assert.ok(!serialized.includes("SECRET"));
+  assert.ok(!serialized.includes("content"));
+  assert.ok(!serialized.includes("config"));
+});
+
+test("live partial question replies settle only exact keys, ignore ordinary/rejected input and emit one done", () => {
+  const { je, context, api } = createHarness();
+  const provider = makeProvider();
+  const panel = provider.add({ title: "Codex" }, { id: "w1" });
+  api.install(provider, context);
+  bind(api, provider, panel, { id: "w1" }, "t1", "Alpha");
+
+  api.notify(provider, started("turn1", 10));
+  api.notify(provider, {
+    method: "item/started",
+    params: { threadId: "t1", turnId: "turn1", item: nativeQuestionItem("q1", 2) },
+  });
+  api.notify(provider, completed("turn1", 10, "completed"));
+  assert.strictEqual(panel.title, "[?] Alpha");
+
+  api.notify(provider, {
+    method: "item/started",
+    params: { threadId: "t1", turnId: "turn1", item: nativeReplyItem("a0", "q1", 0) },
+  });
+  assert.strictEqual(panel.title, "[?] Alpha");
+  assert.strictEqual(provider.__companionWorkflowRuntime.threads.t1.asyncQuestions["turn1|q1"].questionKeys.length, 1);
+
+  api.notify(provider, {
+    method: "item/completed",
+    params: { threadId: "t1", turnId: "turn1", item: nativeQuestionItem("q1", 2) },
+  });
+  api.notify(provider, plainUserMessageItem("item/started", "turn1", "ordinary", "chat about something else"));
+  api.notify(provider, steeringMessageItem(
+    "item/started",
+    "turn1",
+    "steer-rejected",
+    "rejected",
+    JSON.stringify(["request_user_input_async", "q1", 1])
+  ));
+  assert.strictEqual(panel.title, "[?] Alpha");
+  assert.strictEqual(statusEvents(je, "done").length, 0);
+
+  // Pending and accepted versions share an item id. The pending one must not
+  // dedupe the later accepted reply.
+  const acceptedKey = JSON.stringify(["request_user_input_async", "q1", 1]);
+  api.notify(provider, steeringMessageItem("item/started", "turn1", "steer-ok", "pending", acceptedKey));
+  assert.strictEqual(panel.title, "[?] Alpha");
+  api.notify(provider, steeringMessageItem("item/started", "turn1", "steer-ok", "accepted", acceptedKey));
+  assert.strictEqual(panel.title, "[V] Alpha");
+  assert.strictEqual(statusEvents(je, "done").length, 1);
+  assert.strictEqual(statusEvents(je, "done")[0].live, true);
+});
+
+test("paginated turns/list + two/three item pages complete only with an explicit null cursor", () => {
+  const h = historyHarness();
+  h.track({
+    id: "roots-1",
+    method: "thread/turns/list",
+    params: { threadId: "t1", itemsView: "notLoaded", sortDirection: "desc" },
+  });
+  assert.strictEqual(
+    h.respond({
+      id: "roots-1",
+      result: {
+        data: [{ id: "turn9", status: "completed", startedAt: null, itemsView: "notLoaded" }],
+        nextCursor: "older-turns",
+      },
+      error: null,
+    }),
+    false
+  );
+  h.track({
+    id: "items-1",
+    method: "thread/items/list",
+    params: { threadId: "t1", turnId: "turn9", cursor: null, sortDirection: "desc", itemsView: "full" },
+  });
+  assert.strictEqual(
+    h.respond({
+      id: "items-1",
+      result: { data: [{ turnId: "turn9", item: nativeQuestionItem("q1", 2) }], nextCursor: "p2" },
+      error: null,
+    }),
+    false
+  );
+  assert.strictEqual(h.panel.title, "Alpha");
+  h.track({
+    id: "items-2",
+    method: "thread/items/list",
+    params: { threadId: "t1", turnId: "turn9", cursor: "p2", sortDirection: "desc", itemsView: "full" },
+  });
+  assert.strictEqual(
+    h.respond({
+      id: "items-2",
+      result: { data: [{ turnId: "turn9", item: nativeReplyItem("a0", "q1", 0) }], nextCursor: "p3" },
+      error: null,
+    }),
+    false
+  );
+  assert.strictEqual(h.panel.title, "Alpha");
+  assert.strictEqual(h.runtime.threads.t1.asyncQuestionCount, 0);
+  h.track({
+    id: "items-3",
+    method: "thread/items/list",
+    params: { threadId: "t1", turnId: "turn9", cursor: "p3", sortDirection: "desc", itemsView: "full" },
+  });
+  assert.strictEqual(
+    h.respond({
+      id: "items-3",
+      result: {
+        data: [{ turnId: "turn9", item: nativeReplyItem("a1", "q1", 1) }],
+        nextCursor: null,
+      },
+      error: null,
+    }),
+    true
+  );
+  assert.strictEqual(h.panel.title, "[V] Alpha");
+  assert.strictEqual(h.runtime.threads.t1.asyncQuestionCount, 0);
+  assert.strictEqual(h.runtime.threads.t1.doneEmittedFor, "turn9");
+  assert.strictEqual(statusEvents(h.je, "done").length, 1);
+});
+
+test("missing nextCursor and cursor cycles never invent waiting or done", () => {
+  const missing = historyHarness();
+  missing.track({
+    id: "roots",
+    method: "thread/turns/list",
+    params: { threadId: "t1", itemsView: "notLoaded", sortDirection: "desc" },
+  });
+  missing.respond({
+    id: "roots",
+    result: {
+      data: [{ id: "turn9", status: "completed", startedAt: null, itemsView: "notLoaded" }],
+      nextCursor: "older",
+    },
+    error: null,
+  });
+  missing.track({
+    id: "i1",
+    method: "thread/items/list",
+    params: { threadId: "t1", turnId: "turn9", cursor: null, sortDirection: "desc", itemsView: "full" },
+  });
+  missing.respond({
+    id: "i1",
+    result: { data: [{ turnId: "turn9", item: nativeQuestionItem("q1", 1) }], nextCursor: "p2" },
+    error: null,
+  });
+  missing.track({
+    id: "i2",
+    method: "thread/items/list",
+    params: { threadId: "t1", turnId: "turn9", cursor: "p2", sortDirection: "desc", itemsView: "full" },
+  });
+  assert.strictEqual(
+    missing.respond({
+      id: "i2",
+      result: { data: [{ turnId: "turn9", item: nativeReplyItem("a0", "q1", 0) }] },
+      error: null,
+    }),
+    false
+  );
+  assert.strictEqual(missing.panel.title, "Alpha");
+  assert.strictEqual(events(missing.je).length, 0);
+
+  const cycle = historyHarness();
+  cycle.track({
+    id: "roots",
+    method: "thread/turns/list",
+    params: { threadId: "t1", itemsView: "notLoaded", sortDirection: "desc" },
+  });
+  cycle.respond({
+    id: "roots",
+    result: {
+      data: [{ id: "turn9", status: "completed", startedAt: null, itemsView: "notLoaded" }],
+      nextCursor: "older",
+    },
+    error: null,
+  });
+  for (const [id, cursor, next] of [["c1", null, "p2"], ["c2", "p2", "p2"]]) {
+    cycle.track({
+      id,
+      method: "thread/items/list",
+      params: { threadId: "t1", turnId: "turn9", cursor, sortDirection: "desc", itemsView: "full" },
+    });
+    cycle.respond({
+      id,
+      result: { data: [{ turnId: "turn9", item: nativeQuestionItem("q1", 1) }], nextCursor: next },
+      error: null,
+    });
+  }
+  assert.strictEqual(cycle.panel.title, "Alpha");
+  assert.strictEqual(events(cycle.je).length, 0);
+});
+
+test("older roots, live epochs, newer turns and live terminals cannot be regressed by history", () => {
+  const root = historyHarness();
+  root.track({
+    id: "old",
+    method: "thread/resume",
+    params: { threadId: "t1", excludeTurns: true, initialTurnsPage: { limit: 5, itemsView: "full", sortDirection: "desc" } },
+  });
+  root.track({
+    id: "new",
+    method: "thread/resume",
+    params: { threadId: "t1", excludeTurns: true, initialTurnsPage: { limit: 5, itemsView: "full", sortDirection: "desc" } },
+  });
+  assert.strictEqual(root.respond(resumeResponse("new", turnPage([nativeQuestionItem("q1", 1), nativeReplyItem("a0", "q1", 0)]))), true);
+  assert.strictEqual(root.panel.title, "[V] Alpha");
+  assert.strictEqual(root.respond(resumeResponse("old", turnPage([nativeQuestionItem("q1", 1)]))), false);
+  assert.strictEqual(root.panel.title, "[V] Alpha");
+
+  const epoch = historyHarness();
+  epoch.track({
+    id: "epoch",
+    method: "thread/resume",
+    params: { threadId: "t1", excludeTurns: true, initialTurnsPage: { limit: 5, itemsView: "full", sortDirection: "desc" } },
+  });
+  epoch.api.notify(epoch.provider, started("turn1", 10));
+  assert.strictEqual(epoch.respond(resumeResponse("epoch", turnPage([nativeQuestionItem("q1", 1)]))), false);
+  assert.strictEqual(epoch.panel.title, "[~] Alpha");
+
+  const newer = historyHarness();
+  newer.api.notify(newer.provider, started("turn2", 20));
+  newer.track({
+    id: "old-turn",
+    method: "thread/resume",
+    params: { threadId: "t1", excludeTurns: true, initialTurnsPage: { limit: 5, itemsView: "full", sortDirection: "desc" } },
+  });
+  assert.strictEqual(
+    newer.respond(resumeResponse("old-turn", turnPage([nativeQuestionItem("q1", 1)], null, { turnId: "turn1", startedAt: 10 }))),
+    false
+  );
+  assert.strictEqual(newer.panel.title, "[~] Alpha");
+
+  const live = historyHarness();
+  live.api.notify(live.provider, started("turn1", 10));
+  live.api.notify(live.provider, completed("turn1", 10, "completed"));
+  assert.strictEqual(live.panel.title, "[V] Alpha");
+  live.track({
+    id: "stale-terminal",
+    method: "thread/resume",
+    params: { threadId: "t1", excludeTurns: true, initialTurnsPage: { limit: 5, itemsView: "full", sortDirection: "desc" } },
+  });
+  assert.strictEqual(
+    live.respond(resumeResponse("stale-terminal", turnPage([nativeQuestionItem("q1", 1)], null, { turnId: "turn1", startedAt: 10 }))),
+    false
+  );
+  assert.strictEqual(live.panel.title, "[V] Alpha");
+  assert.strictEqual(statusEvents(live.je, "done").length, 1);
+});
+
+test("roots change and webview disposal clear pending history assembly", () => {
+  const h = historyHarness();
+  h.track({
+    id: "roots-read",
+    method: "thread/resume",
+    params: { threadId: "t1", excludeTurns: true, initialTurnsPage: { limit: 5, itemsView: "full", sortDirection: "desc" } },
+  });
+  assert.strictEqual(h.runtime.readCount, 1);
+  assert.ok(h.je.foldersHandlers.length > 0);
+  h.setRoots(["C:\\Other"]);
+  h.je.foldersHandlers[0]();
+  assert.strictEqual(h.runtime.readCount, 0);
+  assert.strictEqual(h.respond(resumeResponse("roots-read", turnPage([nativeQuestionItem("q1", 1)]))), false);
+  assert.strictEqual(h.panel.title, "Alpha");
+
+  const disposed = historyHarness();
+  disposed.track({
+    id: "view-read",
+    method: "thread/resume",
+    params: { threadId: "t1", excludeTurns: true, initialTurnsPage: { limit: 5, itemsView: "full", sortDirection: "desc" } },
+  });
+  assert.strictEqual(disposed.api.forgetWebviewReads(disposed.provider, disposed.webview), 1);
+  assert.strictEqual(disposed.runtime.readCount, 0);
+  assert.strictEqual(disposed.respond(resumeResponse("view-read", turnPage([nativeQuestionItem("q1", 1)]))), false);
+  assert.strictEqual(disposed.panel.title, "Alpha");
+});
+
+test("async persisted restore cannot overwrite resumed complete question evidence", async () => {
+  const saved = {
+    version: 1,
+    roots: ["C:\\Project"],
+    threads: {
+      t1: { status: "done", turnId: "rollout-2", goalStatus: null, completedTurnId: "rollout-2", updatedAt: 5 },
+    },
+  };
+  const h = historyHarness({ saved, asyncRestore: true });
+  assert.strictEqual(
+    h.resume("resume-async", turnPage([nativeQuestionItem("q1", 1)])),
+    true
+  );
+  assert.strictEqual(h.panel.title, "[?] Alpha");
+  h.resolveRestore();
+  await flush();
+  assert.strictEqual(h.panel.title, "[?] Alpha");
+  assert.strictEqual(h.runtime.threads.t1.status, "waiting");
+  assert.strictEqual(h.runtime.threads.t1.completedTurnId, "rollout-3");
+  assert.strictEqual(h.runtime.threads.t1.questionClosedTurnId, "rollout-3");
+  assert.strictEqual(events(h.je).filter((event) => event.live !== false).length, 0);
 });

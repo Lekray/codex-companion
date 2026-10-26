@@ -13,7 +13,7 @@
   ],
   "files": {
     "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
-    "out/extension.js": "086b57fac497d5c2078c755676173571cb37f68f6e700071e2faa714c32b566a",
+    "out/extension.js": "3d6b5ca349661717a92fbd6a8ee257a68585109a25703eeb7038c965d18f5fd3",
     "webview/assets/src-622b307a9baf.js": "aa54b2c189367a50541a7ea27b3cfe05d5c476588d657f63543ce8eac681fdb2",
     "webview/assets/initialize-app-host-services.extension-f722db488e05.js": "b7591760d7d1ca8ab64644151f2997617ac77d0ba9ccc139dd3881b59fe1f73c",
     "webview/assets/local-conversation-page-e49199d4fdb5.js": "4a5b4d7414669edf6a57420f1ea3186fba9f505c0d4bc9491e528acf9f0bbcd1",

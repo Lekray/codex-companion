@@ -125,11 +125,21 @@ function rewriteAliases(source, aliases) {
 
 function statusCoreSource() {
   // Keep the 26.1007 runtime and its guarded upgrade stages byte-identical.
-  return rewriteAliases(resourceSource("officialTabStatusV2.js"), {
-    cR: "fv",
-    je: "Be",
-    TKe: "jje",
-  });
+  // The pure question-history assembler is injected first so the V2 runtime can
+  // call its plain host globals; only the V2 payload carries host aliases.
+  const questionHistory = resourceSource("officialQuestionHistory.js");
+  if (typeof questionHistory !== "string" || questionHistory.length === 0) {
+    throw new Error("question history resource is empty");
+  }
+  return (
+    questionHistory +
+    "\n" +
+    rewriteAliases(resourceSource("officialTabStatusV2.js"), {
+      cR: "fv",
+      je: "Be",
+      TKe: "jje",
+    })
+  );
 }
 
 function modelCoreSource() {
