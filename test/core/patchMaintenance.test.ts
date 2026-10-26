@@ -4,6 +4,7 @@ import {
   INSTALL_PATCH_COMMAND,
   PatchMaintenanceUi,
   RESTORE_PATCH_COMMAND,
+  renderMaintenanceReport,
   type MaintenanceEngine,
   type MaintenanceEngineOptions,
   type MaintenanceReport,
@@ -276,6 +277,15 @@ test('precheck flags canInstall and canRestore independently of state guards', a
 test('command identifiers stay stable for Main registration', () => {
   assert.equal(INSTALL_PATCH_COMMAND, 'codexCompanion.installPatch');
   assert.equal(RESTORE_PATCH_COMMAND, 'codexCompanion.restorePatch');
+});
+
+test('preload-index reports an accurate translated feature label', () => {
+  const value = report({
+    state: 'drafts',
+    features: [...FEATURES, { id: 'preload-index', status: 'installed' as const }],
+  });
+  assert.match(renderMaintenanceReport(value, true), /Ускорение открытия чата/);
+  assert.match(renderMaintenanceReport(value, false), /Faster chat opening/);
 });
 
 test('a completed operation releases its guard before its information toast is dismissed', async () => {

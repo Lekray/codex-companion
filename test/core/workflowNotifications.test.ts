@@ -277,6 +277,8 @@ test('dispose suppresses pending and later side effects', async () => {
 
 test('claim file creation is atomic and deduplicates across fresh helpers', async () => {
   const dir = join(artifacts, `claims-${process.pid}-${randomUUID()}`);
+  const originalVscodePid = process.env.VSCODE_PID;
+  delete process.env.VSCODE_PID;
   try {
     const results = await Promise.all([
       claimNotificationEvent(dir, 'logical-event'),
@@ -293,6 +295,8 @@ test('claim file creation is atomic and deduplicates across fresh helpers', asyn
       assert.match(await readFile(join(dir, file), 'utf8'), /^\d{4}-\d{2}-\d{2}T/);
     }
   } finally {
+    if (originalVscodePid === undefined) delete process.env.VSCODE_PID;
+    else process.env.VSCODE_PID = originalVscodePid;
     await rm(dir, { recursive: true, force: true });
   }
 });

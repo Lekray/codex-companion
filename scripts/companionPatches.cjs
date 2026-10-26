@@ -101,8 +101,13 @@ function defaultBackupPathForVersion(version) {
     ? version.trim()
     : LEGACY_SUPPORTED_VERSION;
   const newSpec = loadPinnedNewSpec();
+  const specFiles = newSpec && Array.isArray(newSpec.FILES) ? newSpec.FILES.length : 0;
   const leaf = newSpec && normalized === newSpec.SUPPORTED_VERSION
-    ? (Array.isArray(newSpec.FILES) && newSpec.FILES.length === 10 ? 'chunks-v2' : 'chunks-v1')
+    ? specFiles === 11
+      ? 'chunks-v3'
+      : specFiles === 10
+        ? 'chunks-v2'
+        : 'chunks-v1'
     : 'drafts-v1';
   return path.join(localAppDataDir(), 'codex-companion', 'patches', normalized, leaf);
 }

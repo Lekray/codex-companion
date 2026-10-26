@@ -1,4 +1,32 @@
-# Требования Codex Companion — 0.2.9
+# Требования Codex Companion — 0.2.10
+
+## Принятый этап 0.2.10
+
+Обрезанные inline-ходы/страницы не доказывают полноту истории и сохраняют
+известное состояние. Флаги truncated/itemsTruncated/summary проверяются до
+проекции в resume.initialTurnsPage, turns/list и item-страницах. Обычная
+пагинация старых ходов не считается обрезанием сама по себе.
+
+Индекс URL/stylesheet в preload helper строится заново на каждый вызов;
+списки импортов/CSS, nonce, обработка ошибок и порядок добавления сохраняются.
+Новый одиннадцатый target app-initial-13f932cb2f13.js входит в attestation,
+manifest, backup chunks-v3 и полный откат. Legacy5 и старые backup не изменяются.
+
+Дедупликация уведомлений хранит digest/дату в SQLite с уникальным ключом;
+межпроцессный claim фиксируется до уведомления. Старые .claim читаются и
+сохраняются. Пока жив исходный VSCODE_PID, используется прежний wx-формат;
+переход — после обычного полного перезапуска VS Code. Ошибка компактной БД не
+должна приводить к повторной доставке через fallback. Ограничено число файлов,
+а не общий объём данных. Native-откат не удаляет отметки; downgrade пакета
+Companion после перехода на SQLite требует отдельной миграции.
+
+Main: 505 тестов без ошибок/пропусков; 18 синтетических проверок статусов в живом
+host, черновики и сохранённый чат из VSIX. Повторные вкладки: контроль 9,15–11,31 с,
+конечный пакет 5,68–6,17 с, без гарантии одинакового ускорения на всех машинах.
+Exact5/exact11 restore/install/no-op, отказ последней записи, 120 файлов установки,
+32 прежних backup по hash/mtime; compatibility ok, canRestore true. Сообщений
+модели 0, автоматического reload и публикации нет. Текущая установка — 0.2.10.
+Evidence и границы приёмки — docs/HANDOFF.md, .artifacts/fixes-0210/.
 
 ## Принятый этап 0.2.9
 
@@ -109,19 +137,19 @@ LOCALAPPDATA/codex-companion/patches/26.1007.21434/drafts-v1. Auto legacy
 adoption только из проверенного old4 backup + оригинального 7a; старые
 файлы/manifest не менять.
 
-Для 26.1021 — schema 3: десять оригиналов — package.json (identity guard),
-out/extension.js и восемь точных webview chunks (src-622b,
+Для 26.1021 — schema 3: одиннадцать оригиналов — package.json (identity guard),
+out/extension.js и девять точных webview chunks (src-622b,
 initialize-app-host-services, chatgpt-conversation-page, message-bus,
 dynamic-intelligence-dropdown, composer-content, composer-scope,
-bookmarked-thread-user-message-navigation-36a0dadf9f5d). Metadata —
+bookmarked-thread-user-message-navigation-36a0dadf9f5d и app-initial-13f932cb2f13). Metadata —
 resources/patchBundleManifest-26.1021.22027.json и
 patchAttestation-26.1021.22027.json; backup —
-LOCALAPPDATA/codex-companion/patches/26.1021.22027/chunks-v2. Новый install
+LOCALAPPDATA/codex-companion/patches/26.1021.22027/chunks-v3. Новый install
 не делает legacy adoption и не трогает старый backup.
 
-Обновление с 0.2.7: прежний engine выполняет точный restore девяти оригиналов,
-затем engine 0.2.8 устанавливает десять целей с новым chunks-v2. Прежний
-chunks-v1 сохраняется; неизвестные/изменённые байты автоматически не исправляются.
+Обновление с 0.2.9: прежний engine возвращает десять оригиналов, затем
+новый устанавливает одиннадцать с отдельной копией chunks-v3. Старые chunks-v2/1
+не меняются; неизвестные байты не перезаписываются.
 
 Общие правила: известные целые стадии original/history/titles/workflow/drafts;
 источники и все цели проверены до записи; unknown/mixed/modified и invalid backup
@@ -129,7 +157,8 @@ chunks-v1 сохраняется; неизвестные/изменённые б
 rollback с сохранением внешних изменений; ошибки неполного rollback сообщать явно.
 Full restore возвращает все оригинальные цели, не трогает пользовательские данные;
 package identity не переписывается. Downgrade сначала full restore новым engine,
-затем старый VSIX/patches. Проверка/отчёт ничего не устанавливают. Unknown версии
+затем прежние native-патчи. Downgrade Companion после перехода на SQLite
+требует отдельной миграции отметок уведомлений. Проверка/отчёт ничего не устанавливают. Unknown версии
 автоматически не патчить.
 
 `projectHistoryUi` и `titleRefresh` используют VERIFIED_EDITOR_VERSIONS для

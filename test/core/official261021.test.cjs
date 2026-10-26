@@ -9,10 +9,11 @@ const ADAPTER = process.env.COMPANION_ADAPTER_261021
   : path.join(__dirname, "..", "..", "scripts", "official261021.cjs");
 
 const adapter = require(ADAPTER);
+const { createEngine } = require("../../scripts/companionPatchEngine.cjs");
 
 const INSTALLED =
   process.env.COMPANION_OFFICIAL_261021 ||
-  path.resolve(__dirname, "../../.artifacts/webview-recovery/integration/originals");
+  path.resolve(__dirname, "../../.artifacts/fixes-0210/originals");
 
 const hasInstalled = fs.existsSync(path.join(INSTALLED, "package.json"));
 
@@ -23,8 +24,8 @@ test("SUPPORTED_VERSION and identity constants", () => {
   assert.equal(adapter.MANIFEST_SCHEMA, 3);
 });
 
-test("FILES is exactly the ten pinned originals", () => {
-  assert.equal(adapter.FILES.length, 10);
+test("FILES is exactly the eleven pinned originals", () => {
+  assert.equal(adapter.FILES.length, 11);
   assert.deepEqual(adapter.FILES, [
     "package.json",
     "out/extension.js",
@@ -36,6 +37,7 @@ test("FILES is exactly the ten pinned originals", () => {
     "webview/assets/composer-content-8ab21f1a1982.js",
     "webview/assets/composer-scope-f0dbf0e746b6.js",
     "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js",
+    "webview/assets/app-initial-13f932cb2f13.js",
   ]);
   for (const rel of adapter.FILES) {
     assert.match(adapter.ORIGINAL_HASHES[rel], /^[0-9a-f]{64}$/);
@@ -43,7 +45,7 @@ test("FILES is exactly the ten pinned originals", () => {
   }
 });
 
-test("STAGES and FEATURES match the required eight feature IDs", () => {
+test("STAGES and FEATURES match the required nine feature IDs", () => {
   assert.deepEqual(adapter.STAGES, ["original", "history", "titles", "workflow", "drafts"]);
   assert.deepEqual(
     adapter.FEATURES.map((f) => f.id),
@@ -56,6 +58,7 @@ test("STAGES and FEATURES match the required eight feature IDs", () => {
       "workflow-notifications",
       "independent-drafts",
       "webview-recovery",
+      "preload-index",
     ]
   );
   for (const feature of adapter.FEATURES) {
@@ -67,6 +70,17 @@ test("STAGES and FEATURES match the required eight feature IDs", () => {
     adapter.FEATURES.find((f) => f.id === "webview-recovery"),
     { id: "webview-recovery", stage: "drafts", files: [adapter.RECOVERY_FILE] }
   );
+  assert.deepEqual(
+    adapter.FEATURES.find((f) => f.id === "preload-index"),
+    { id: "preload-index", stage: "drafts", files: [adapter.PRELOAD_FILE] }
+  );
+});
+
+test("the preload index transform is pinned to the new official target", () => {
+  const preload = require("../../scripts/officialPreloadIndex.cjs");
+  assert.equal(adapter.PRELOAD_FILE, preload.FILE);
+  assert.equal(adapter.PRELOAD_FILE, "webview/assets/app-initial-13f932cb2f13.js");
+  assert.equal(adapter.ORIGINAL_HASHES[adapter.PRELOAD_FILE], preload.ORIGINAL_HASH);
 });
 
 test("transformStage rejects unknown file and unknown stage", () => {
@@ -91,6 +105,9 @@ test("per-stage unaffected files are returned unchanged", () => {
   assert.equal(adapter.transformStage(adapter.RECOVERY_FILE, sentinel, "history"), sentinel);
   assert.equal(adapter.transformStage(adapter.RECOVERY_FILE, sentinel, "titles"), sentinel);
   assert.equal(adapter.transformStage(adapter.RECOVERY_FILE, sentinel, "workflow"), sentinel);
+  assert.equal(adapter.transformStage(adapter.PRELOAD_FILE, sentinel, "history"), sentinel);
+  assert.equal(adapter.transformStage(adapter.PRELOAD_FILE, sentinel, "titles"), sentinel);
+  assert.equal(adapter.transformStage(adapter.PRELOAD_FILE, sentinel, "workflow"), sentinel);
 });
 
 test("status runtime aliases are rewritten for the new host", () => {
@@ -224,6 +241,15 @@ test("draft stage applies the pinned webview recovery transform only to its targ
   assert.ok(drafts.includes("propagateLoadError:!1"));
 });
 
+test("draft stage applies the pinned preload index transform only to its target", { skip: !hasInstalled }, () => {
+  const preload = require("../../scripts/officialPreloadIndex.cjs");
+  const source = fs.readFileSync(path.join(INSTALLED, adapter.PRELOAD_FILE), "utf8");
+  const drafts = adapter.transformStage(adapter.PRELOAD_FILE, source, "drafts");
+  assert.equal(drafts, preload.transform(source));
+  assert.equal(adapter.sha256(drafts), preload.PATCHED_HASH);
+  assert.ok(drafts.includes("if(r?h.has(t):u.has(t))return;"));
+});
+
 test("missing anchor throws", { skip: !hasInstalled }, () => {
   const host = fs.readFileSync(path.join(INSTALLED, adapter.HOST), "utf8");
   const corrupted = host.replace(
@@ -248,10 +274,64 @@ test("duplicate anchor throws", { skip: !hasInstalled }, () => {
 });
 
 test("verifyTransforms syntax-checks every generated program", { skip: !hasInstalled }, () => {
-  const workDir = path.join(__dirname, "..", "..", ".artifacts", "webview-recovery", "integration", "adapter-work", "test-generated");
+  const workDir = path.join(__dirname, "..", "..", ".artifacts", "fixes-0210", "integration", "adapter-work", "test-generated");
   const report = adapter.verifyTransforms(INSTALLED, workDir);
   for (const rel of adapter.FILES) {
     assert.equal(report[rel].syntax, "ok");
     assert.match(report[rel].patchedSha, /^[0-9a-f]{64}$/);
   }
+});
+
+test("eleven-target engine rejects missing and mixed preload targets without writing", { skip: !hasInstalled }, async (t) => {
+  const preload = require("../../scripts/officialPreloadIndex.cjs");
+  const fixtureRoot = path.join(__dirname, "..", "..", ".artifacts", "fixes-0210", "integration", "engine-fixtures");
+  fs.mkdirSync(fixtureRoot, { recursive: true });
+  const root = fs.mkdtempSync(path.join(fixtureRoot, "engine-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const extDir = path.join(root, "extension");
+  fs.cpSync(INSTALLED, extDir, { recursive: true });
+  const backupDir = path.join(root, "backup");
+  const engine = createEngine(adapter);
+  const preloadPath = path.join(extDir, ...adapter.PRELOAD_FILE.split("/"));
+  const snapshot = () =>
+    adapter.FILES.map((rel) => adapter.sha256(fs.readFileSync(path.join(extDir, ...rel.split("/")))));
+
+  const original = await engine.check({ extDir, backupDir });
+  assert.equal(original.state, "original");
+  assert.equal(original.code, "original");
+  assert.equal(original.canInstall, true);
+  assert.equal(original.features.find((f) => f.id === "preload-index").status, "missing");
+
+  const previousLocalAppData = process.env.LOCALAPPDATA;
+  process.env.LOCALAPPDATA = path.join(root, "local-appdata");
+  try {
+    const fresh = await engine.check({ extDir });
+    assert.equal(
+      fresh.backup.path,
+      path.join(process.env.LOCALAPPDATA, "codex-companion", "patches", adapter.SUPPORTED_VERSION, "chunks-v3"),
+    );
+  } finally {
+    if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = previousLocalAppData;
+  }
+
+  fs.rmSync(preloadPath);
+  const missing = await engine.check({ extDir, backupDir });
+  assert.equal(missing.code, "missing-file");
+  assert.equal(missing.canInstall, false);
+  assert.equal(missing.features.find((f) => f.id === "preload-index").status, "unverified");
+
+  fs.writeFileSync(preloadPath, preload.transform(fs.readFileSync(path.join(INSTALLED, ...adapter.PRELOAD_FILE.split("/")), "utf8")));
+  const mixed = await engine.check({ extDir, backupDir });
+  assert.equal(mixed.state, "mixed");
+  assert.equal(mixed.code, "mixed");
+  assert.equal(mixed.canInstall, false);
+  assert.equal(mixed.canRestore, false);
+  assert.equal(fs.existsSync(backupDir), false);
+  assert.deepEqual(snapshot(), adapter.FILES.map((rel) =>
+    rel === adapter.PRELOAD_FILE
+      ? adapter.sha256(preload.transform(fs.readFileSync(path.join(INSTALLED, ...rel.split("/")), "utf8")))
+      : adapter.ORIGINAL_HASHES[rel]
+  ));
 });

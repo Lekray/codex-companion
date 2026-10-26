@@ -5,7 +5,15 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { test, type TestContext } from 'node:test';
-import { inspectOfficialPatch, type PatchAttestation } from '../../src/patchCompatibility';
+import {
+  SCHEMA3_FILES,
+  SCHEMA3_FILES10,
+  SCHEMA3_FILES11,
+  SCHEMA3_OFFICIAL_VERSION,
+  compatibilityFilesForVersion,
+  inspectOfficialPatch,
+  type PatchAttestation,
+} from '../../src/patchCompatibility';
 
 const VERSION = '26.1007.21434';
 const FILES = [
@@ -51,10 +59,23 @@ function findProjectRoot(start: string): string {
 }
 
 const FIXTURE_ROOT = join(findProjectRoot(__dirname), '.artifacts', 'workflow-v15', 'compatibility');
+const SCHEMA3_FIXTURE_ROOT = join(
+  findProjectRoot(__dirname),
+  '.artifacts',
+  'fixes-0210',
+  'integration',
+  'compatibility',
+);
+const PRELOAD_FILE = 'webview/assets/app-initial-13f932cb2f13.js';
+const RECOVERY_FILE = 'webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js';
 
-async function fixture(t: TestContext, files: Record<string, string | Buffer>): Promise<string> {
-  await mkdir(FIXTURE_ROOT, { recursive: true });
-  const directory = await mkdtemp(join(FIXTURE_ROOT, 'fixture-'));
+async function fixture(
+  t: TestContext,
+  files: Record<string, string | Buffer>,
+  root = FIXTURE_ROOT,
+): Promise<string> {
+  await mkdir(root, { recursive: true });
+  const directory = await mkdtemp(join(root, 'fixture-'));
   for (const [name, content] of Object.entries(files)) {
     const target = join(directory, ...name.split('/'));
     await mkdir(dirname(target), { recursive: true });
@@ -250,4 +271,43 @@ test('schema 2 requires and verifies the additional composer bundle', async t =>
   const incomplete={...expected,files:{...expected.files}};delete incomplete.files[extra];
   assert.equal((await inspectOfficialPatch(directory,incomplete)).code,'manifest');
   assert.equal((await inspectOfficialPatch(directory,{...expected,schema:1})).code,'manifest');
+});
+
+test('schema 3 requires the exact eleven-target set including the preload index', async t => {
+  assert.deepEqual([...SCHEMA3_FILES11], [...SCHEMA3_FILES10, PRELOAD_FILE]);
+  assert.deepEqual([...SCHEMA3_FILES10], [...SCHEMA3_FILES, RECOVERY_FILE]);
+  assert.deepEqual(compatibilityFilesForVersion(SCHEMA3_OFFICIAL_VERSION), [...SCHEMA3_FILES11]);
+
+  const files: Record<string, string> = {
+    'package.json': JSON.stringify({
+      publisher: 'openai',
+      name: 'chatgpt',
+      version: SCHEMA3_OFFICIAL_VERSION,
+    }),
+  };
+  for (const rel of SCHEMA3_FILES11) {
+    if (rel !== 'package.json') files[rel] = `official schema 3 bundle ${rel}`;
+  }
+  const directory = await fixture(t, files, SCHEMA3_FIXTURE_ROOT);
+  const hashes: Record<string, string> = {};
+  for (const rel of SCHEMA3_FILES11) hashes[rel] = sha256(files[rel]!);
+  const valid: PatchAttestation = {
+    schema: 3,
+    officialVersion: SCHEMA3_OFFICIAL_VERSION,
+    features: ['preload-index'],
+    files: hashes,
+  };
+  assert.equal((await inspectOfficialPatch(directory, valid)).code, 'ok');
+
+  const missingPreload = { ...hashes };
+  delete missingPreload[PRELOAD_FILE];
+  const missing = await inspectOfficialPatch(directory, { ...valid, files: missingPreload });
+  assert.equal(missing.code, 'manifest');
+  assert.ok(missing.issues.some(issue => issue.includes(PRELOAD_FILE)));
+
+  const extraTarget = await inspectOfficialPatch(directory, {
+    ...valid,
+    files: { ...hashes, 'webview/assets/extra.js': sha256('extra') },
+  });
+  assert.equal(extraTarget.code, 'manifest');
 });

@@ -13,7 +13,8 @@
     "webview/assets/use-model-settings-aafcff4b111c.js",
     "webview/assets/composer-content-8ab21f1a1982.js",
     "webview/assets/composer-scope-f0dbf0e746b6.js",
-    "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js"
+    "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js",
+    "webview/assets/app-initial-13f932cb2f13.js"
   ],
   "stages": {
     "original": {
@@ -26,7 +27,8 @@
       "webview/assets/use-model-settings-aafcff4b111c.js": "23d2322fe24ae6d151e2fef55108942be50ca8b38aacd52e5102143bb2d1b47e",
       "webview/assets/composer-content-8ab21f1a1982.js": "a4fbed28d7fbc35c755690023da6eba1ca656719bd2823a95684e47cfbdd3d01",
       "webview/assets/composer-scope-f0dbf0e746b6.js": "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
-      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b"
+      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b",
+      "webview/assets/app-initial-13f932cb2f13.js": "9852ece5b9a25906b654fa8cccd77873105fe1b88556b141fc35dc4062511629"
     },
     "history": {
       "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
@@ -38,7 +40,8 @@
       "webview/assets/use-model-settings-aafcff4b111c.js": "23d2322fe24ae6d151e2fef55108942be50ca8b38aacd52e5102143bb2d1b47e",
       "webview/assets/composer-content-8ab21f1a1982.js": "a4fbed28d7fbc35c755690023da6eba1ca656719bd2823a95684e47cfbdd3d01",
       "webview/assets/composer-scope-f0dbf0e746b6.js": "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
-      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b"
+      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b",
+      "webview/assets/app-initial-13f932cb2f13.js": "9852ece5b9a25906b654fa8cccd77873105fe1b88556b141fc35dc4062511629"
     },
     "titles": {
       "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
@@ -50,11 +53,12 @@
       "webview/assets/use-model-settings-aafcff4b111c.js": "23d2322fe24ae6d151e2fef55108942be50ca8b38aacd52e5102143bb2d1b47e",
       "webview/assets/composer-content-8ab21f1a1982.js": "a4fbed28d7fbc35c755690023da6eba1ca656719bd2823a95684e47cfbdd3d01",
       "webview/assets/composer-scope-f0dbf0e746b6.js": "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
-      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b"
+      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b",
+      "webview/assets/app-initial-13f932cb2f13.js": "9852ece5b9a25906b654fa8cccd77873105fe1b88556b141fc35dc4062511629"
     },
     "workflow": {
       "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
-      "out/extension.js": "3d6b5ca349661717a92fbd6a8ee257a68585109a25703eeb7038c965d18f5fd3",
+      "out/extension.js": "948a5583504f716a9a5efefe8a617111ea9228f60400f349726a9c5d325a9bda",
       "webview/assets/src-622b307a9baf.js": "aa54b2c189367a50541a7ea27b3cfe05d5c476588d657f63543ce8eac681fdb2",
       "webview/assets/initialize-app-host-services.extension-f722db488e05.js": "b7591760d7d1ca8ab64644151f2997617ac77d0ba9ccc139dd3881b59fe1f73c",
       "webview/assets/local-conversation-page-e49199d4fdb5.js": "4a5b4d7414669edf6a57420f1ea3186fba9f505c0d4bc9491e528acf9f0bbcd1",
@@ -62,11 +66,12 @@
       "webview/assets/use-model-settings-aafcff4b111c.js": "4ed17b3232091dd85537be18301ab1bd3e9d7711b9524cc2444de7a201053f74",
       "webview/assets/composer-content-8ab21f1a1982.js": "a3b91dee9230ab94d1518c90dc63e83d5284dba4b468ba0a58c2f68bb8c49cdc",
       "webview/assets/composer-scope-f0dbf0e746b6.js": "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
-      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b"
+      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b",
+      "webview/assets/app-initial-13f932cb2f13.js": "9852ece5b9a25906b654fa8cccd77873105fe1b88556b141fc35dc4062511629"
     },
     "drafts": {
       "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
-      "out/extension.js": "3d6b5ca349661717a92fbd6a8ee257a68585109a25703eeb7038c965d18f5fd3",
+      "out/extension.js": "948a5583504f716a9a5efefe8a617111ea9228f60400f349726a9c5d325a9bda",
       "webview/assets/src-622b307a9baf.js": "aa54b2c189367a50541a7ea27b3cfe05d5c476588d657f63543ce8eac681fdb2",
       "webview/assets/initialize-app-host-services.extension-f722db488e05.js": "b7591760d7d1ca8ab64644151f2997617ac77d0ba9ccc139dd3881b59fe1f73c",
       "webview/assets/local-conversation-page-e49199d4fdb5.js": "4a5b4d7414669edf6a57420f1ea3186fba9f505c0d4bc9491e528acf9f0bbcd1",
@@ -74,7 +79,8 @@
       "webview/assets/use-model-settings-aafcff4b111c.js": "4ed17b3232091dd85537be18301ab1bd3e9d7711b9524cc2444de7a201053f74",
       "webview/assets/composer-content-8ab21f1a1982.js": "a3b91dee9230ab94d1518c90dc63e83d5284dba4b468ba0a58c2f68bb8c49cdc",
       "webview/assets/composer-scope-f0dbf0e746b6.js": "79227c2014dd9a11ed1d2ab8ed6428723626245bea2791cc7b6af02b5d57507d",
-      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "dc3e4c4bb1abf3b8b85ad2565e390eb4067a2f322becf038a1c9792ac03e3285"
+      "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "dc3e4c4bb1abf3b8b85ad2565e390eb4067a2f322becf038a1c9792ac03e3285",
+      "webview/assets/app-initial-13f932cb2f13.js": "3753642aab9026fe1fdf361530612b6a3864ec7c084e68778c6f7f003e7c549e"
     }
   },
   "features": [
@@ -138,6 +144,13 @@
       "stage": "drafts",
       "files": [
         "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js"
+      ]
+    },
+    {
+      "id": "preload-index",
+      "stage": "drafts",
+      "files": [
+        "webview/assets/app-initial-13f932cb2f13.js"
       ]
     }
   ]

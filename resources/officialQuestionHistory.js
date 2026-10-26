@@ -105,6 +105,17 @@ function __companionQuestionSameKeys(a, b) {
   return true;
 }
 
+// A page or turn carrying any of these markers is not a complete item view.
+// Mirror the V2 guard: absent markers prove nothing about missing questions.
+function __companionQuestionIncompleteEvidence(source) {
+  if (source == null || typeof source !== "object") return false;
+  return (
+    source.truncated === true ||
+    source.itemsTruncated === true ||
+    source.summary != null
+  );
+}
+
 // Parse the native question-reply envelope exactly like the V2 TurnQuestions
 // helper. Returns an array of answer questionItemId strings or null.
 function __companionQuestionParseReply(item) {
@@ -376,6 +387,7 @@ function __companionCreateQuestionHistory(deps) {
     var candidate;
     if (requested.sortDirection === "asc") {
       if (page.nextCursor !== null) return null;
+      if (__companionQuestionIncompleteEvidence(page)) return null;
       candidate = data[data.length - 1];
     } else {
       candidate = data[0];
@@ -406,7 +418,10 @@ function __companionCreateQuestionHistory(deps) {
       status: status,
       startedAt: startedAt,
       items: candidate.items,
-      itemsView: candidate.itemsView
+      itemsView: candidate.itemsView,
+      incomplete:
+        __companionQuestionIncompleteEvidence(candidate) ||
+        __companionQuestionIncompleteEvidence(page)
     };
   }
 
@@ -423,6 +438,12 @@ function __companionCreateQuestionHistory(deps) {
       Array.isArray(meta.items) &&
       (meta.itemsView == null || meta.itemsView === "full");
     if (fullInline) {
+      // Truncated/summary-marked inline items cannot prove the full question
+      // set. Abstain without emitting evidence that would settle known state.
+      if (meta.incomplete) {
+        invalidateGroup(group);
+        return false;
+      }
       var projected = projectInlineItems(meta.items);
       if (projected == null) {
         invalidateGroup(group);
@@ -452,6 +473,10 @@ function __companionCreateQuestionHistory(deps) {
     var params = record.params != null && typeof record.params === "object" ? record.params : null;
     if (params == null || params.turnId !== chain.turnId) return false;
     if (result == null || typeof result !== "object" || !Array.isArray(result.data)) {
+      invalidateGroup(group);
+      return false;
+    }
+    if (__companionQuestionIncompleteEvidence(result)) {
       invalidateGroup(group);
       return false;
     }

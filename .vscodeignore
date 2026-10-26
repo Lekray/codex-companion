@@ -26,3 +26,4 @@ docs/**
 node_modules/typescript/**
 node_modules/@types/**
 !scripts/officialDraftTransform.cjs
+!scripts/officialPreloadIndex.cjs

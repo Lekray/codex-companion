@@ -2282,3 +2282,149 @@ test("async persisted restore cannot overwrite resumed complete question evidenc
   assert.strictEqual(h.runtime.threads.t1.questionClosedTurnId, "rollout-3");
   assert.strictEqual(events(h.je).filter((event) => event.live !== false).length, 0);
 });
+
+test("truncated resume and turns/list pages never change known waiting or done state", () => {
+  const seeds = {
+    waiting: {
+      page: turnPage([nativeQuestionItem("q1", 1)]),
+      title: "[?] Alpha",
+      count: 1,
+    },
+    done: {
+      page: turnPage([nativeQuestionItem("q1", 1), nativeReplyItem("a0", "q1", 0)]),
+      title: "[V] Alpha",
+      count: 0,
+    },
+  };
+  const markers = [{ truncated: true }, { itemsTruncated: true }, { summary: "condensed" }];
+  for (const [known, seed] of Object.entries(seeds)) {
+    for (const method of ["resume", "turns"]) {
+      const h = historyHarness();
+      assert.strictEqual(h.resume(`seed-${known}`, seed.page), true, `${known} seed`);
+      assert.strictEqual(h.runtime.threads.t1.status, known);
+      assert.strictEqual(h.panel.title, seed.title);
+      assert.strictEqual(h.runtime.threads.t1.completedTurnId, "rollout-3");
+      assert.strictEqual(h.runtime.threads.t1.asyncQuestionCount || 0, seed.count);
+      const baselineEvents = events(h.je).length;
+      for (const marker of markers) {
+        for (const where of ["turn", "page"]) {
+          const turn = {
+            id: "rollout-3",
+            status: "completed",
+            startedAt: null,
+            itemsView: "full",
+            items: [nativeQuestionItem("q1", 1)],
+          };
+          if (where === "turn") Object.assign(turn, marker);
+          const page = { data: [turn], nextCursor: null };
+          if (where === "page") Object.assign(page, marker);
+          let applied;
+          if (method === "resume") {
+            applied = h.resume(`bad-${known}-${where}-${JSON.stringify(marker)}`, page);
+          } else {
+            const id = `bad-${known}-${where}-${JSON.stringify(marker)}`;
+            h.track({
+              id,
+              method: "thread/turns/list",
+              params: { threadId: "t1", cursor: null, itemsView: "full", sortDirection: "desc" },
+            });
+            applied = h.respond({ id, result: page, error: null });
+          }
+          const label = `${known}/${where}/${JSON.stringify(marker)}`;
+          assert.strictEqual(applied, false, label);
+          assert.strictEqual(h.runtime.readCount, 0, label);
+          assert.strictEqual(h.runtime.threads.t1.status, known, label);
+          assert.strictEqual(h.runtime.threads.t1.completedTurnId, "rollout-3", label);
+          assert.strictEqual(h.runtime.threads.t1.asyncQuestionCount || 0, seed.count, label);
+          assert.strictEqual(h.panel.title, seed.title, label);
+          assert.strictEqual(events(h.je).length, baselineEvents, label);
+          assert.strictEqual(events(h.je).filter((event) => event.live !== false).length, 0, label);
+          assert.ok(!savedText(h.context, h.api).includes("Question 0"), label);
+        }
+      }
+    }
+  }
+});
+
+test("fresh complete resume and turns/list evidence still restore waiting and done after a rejected page", () => {
+  const resumed = historyHarness();
+  assert.strictEqual(
+    resumed.resume("bad-resume", {
+      data: [{
+        id: "rollout-3",
+        status: "completed",
+        startedAt: null,
+        itemsView: "full",
+        items: [nativeQuestionItem("q1", 1)],
+        truncated: true,
+      }],
+      nextCursor: null,
+    }),
+    false
+  );
+  assert.strictEqual(resumed.panel.title, "Alpha");
+  assert.strictEqual(events(resumed.je).length, 0);
+  assert.strictEqual(
+    resumed.resume("good-resume", turnPage([nativePromptItem("item-1"), nativeQuestionItem("q1", 1)])),
+    true
+  );
+  assert.strictEqual(resumed.panel.title, "[?] Alpha");
+  assert.strictEqual(resumed.runtime.threads.t1.status, "waiting");
+  assert.strictEqual(resumed.runtime.threads.t1.asyncQuestionCount, 1);
+  assert.strictEqual(events(resumed.je).filter((event) => event.live !== false).length, 0);
+  assert.strictEqual(statusEvents(resumed.je, "done").length, 0);
+
+  const turns = historyHarness();
+  turns.track({
+    id: "bad-turns",
+    method: "thread/turns/list",
+    params: { threadId: "t1", cursor: null, itemsView: "full", sortDirection: "desc" },
+  });
+  assert.strictEqual(
+    turns.respond({
+      id: "bad-turns",
+      result: {
+        data: [{
+          id: "rollout-3",
+          status: "completed",
+          startedAt: null,
+          itemsView: "full",
+          items: [nativeQuestionItem("q1", 1)],
+          itemsTruncated: true,
+        }],
+        nextCursor: null,
+      },
+      error: null,
+    }),
+    false
+  );
+  assert.strictEqual(turns.panel.title, "Alpha");
+  assert.strictEqual(events(turns.je).length, 0);
+  turns.track({
+    id: "good-turns",
+    method: "thread/turns/list",
+    params: { threadId: "t1", cursor: null, itemsView: "full", sortDirection: "desc" },
+  });
+  assert.strictEqual(
+    turns.respond({
+      id: "good-turns",
+      result: {
+        data: [{
+          id: "rollout-3",
+          status: "completed",
+          startedAt: null,
+          itemsView: "full",
+          items: [nativeQuestionItem("q1", 1), nativeReplyItem("a0", "q1", 0)],
+        }],
+        nextCursor: null,
+      },
+      error: null,
+    }),
+    true
+  );
+  assert.strictEqual(turns.panel.title, "[V] Alpha");
+  assert.strictEqual(turns.runtime.threads.t1.completedTurnId, "rollout-3");
+  const done = statusEvents(turns.je, "done");
+  assert.strictEqual(done.length, 1);
+  assert.strictEqual(done[0].live, false);
+});

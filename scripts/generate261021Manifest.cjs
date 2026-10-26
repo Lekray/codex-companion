@@ -6,7 +6,7 @@
  * Usage:
  *   node scripts/generate261021Manifest.cjs <original-dir> <manifest-out.json> [attestation-out.json] [syntax-work-dir]
  *
- * It verifies the nine pinned original hashes, transforms every target through
+ * It verifies the pinned original hashes, transforms every target through
  * all incremental stages, syntax-verifies the generated programs (no install),
  * and writes the schema:3 manifest and attestation resources.
  */

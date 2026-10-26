@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+
+import { claimStoredNotificationEvent } from './notificationClaimStore';
 
 export type WorkflowNotice = {
   eventId: string;
@@ -43,7 +43,6 @@ export type SoundExecFile = (
 ) => unknown;
 
 const SOUND_TIMEOUT_MS = 10_000;
-const CLAIM_SUFFIX = '.claim';
 const MAX_REMEMBERED_EVENTS = 512;
 const defaultSoundExec = execFile as unknown as SoundExecFile;
 
@@ -104,23 +103,12 @@ export async function playWaitingSound(
   await playSound(extensionPath, 'waiting', exec);
 }
 
+/** Kept as the stable entry point for notification callers. */
 export async function claimNotificationEvent(
   storageDir: string,
   eventId: string,
 ): Promise<boolean> {
-  const digest = createHash('sha256').update(eventId, 'utf8').digest('hex');
-  await mkdir(storageDir, { recursive: true });
-  try {
-    await writeFile(
-      join(storageDir, `${digest}${CLAIM_SUFFIX}`),
-      `${new Date().toISOString()}\n`,
-      { encoding: 'utf8', flag: 'wx' },
-    );
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
-    throw error;
-  }
+  return claimStoredNotificationEvent(storageDir, eventId);
 }
 
 function statusText(status: WorkflowNotice['status'], ru: boolean): string {

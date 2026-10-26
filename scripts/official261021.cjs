@@ -11,6 +11,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const recovery = require("./officialWebviewRecovery.cjs");
+const preload = require("./officialPreloadIndex.cjs");
 
 const PUBLISHER = "openai";
 const NAME = "chatgpt";
@@ -29,10 +30,16 @@ const MODEL_SETTINGS =
 const COMPOSER_CONTENT = "webview/assets/composer-content-8ab21f1a1982.js";
 const COMPOSER_SCOPE = "webview/assets/composer-scope-f0dbf0e746b6.js";
 const RECOVERY_FILE = recovery.FILE;
+const PRELOAD_FILE = preload.FILE;
 
 if (recovery.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
   throw new Error(
     "webview recovery pins " + recovery.SUPPORTED_VERSION + ", expected " + SUPPORTED_VERSION
+  );
+}
+if (preload.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
+  throw new Error(
+    "preload index pins " + preload.SUPPORTED_VERSION + ", expected " + SUPPORTED_VERSION
   );
 }
 
@@ -47,6 +54,7 @@ const FILES = Object.freeze([
   COMPOSER_CONTENT,
   COMPOSER_SCOPE,
   RECOVERY_FILE,
+  PRELOAD_FILE,
 ]);
 
 const ORIGINAL_HASHES = Object.freeze({
@@ -69,6 +77,7 @@ const ORIGINAL_HASHES = Object.freeze({
   [COMPOSER_SCOPE]:
     "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
   [RECOVERY_FILE]: recovery.ORIGINAL_HASH,
+  [PRELOAD_FILE]: preload.ORIGINAL_HASH,
 });
 
 const STAGES = Object.freeze([
@@ -88,6 +97,7 @@ const FEATURES = Object.freeze([
   { id: "workflow-notifications", stage: "workflow", files: [HOST] },
   { id: "independent-drafts", stage: "drafts", files: [COMPOSER_SCOPE] },
   { id: "webview-recovery", stage: "drafts", files: [RECOVERY_FILE] },
+  { id: "preload-index", stage: "drafts", files: [PRELOAD_FILE] },
 ]);
 
 function resourcesDir() {
@@ -723,6 +733,7 @@ function applyWorkflow(file, text) {
 function applyDrafts(file, text) {
   if (file === COMPOSER_SCOPE) return transformDraftsScope(text);
   if (file === RECOVERY_FILE) return recovery.transform(text);
+  if (file === PRELOAD_FILE) return preload.transform(text);
   return text;
 }
 
@@ -892,6 +903,7 @@ module.exports = {
   COMPOSER_CONTENT,
   COMPOSER_SCOPE,
   RECOVERY_FILE,
+  PRELOAD_FILE,
   sha256,
   replaceOnce,
   rewriteAliases,

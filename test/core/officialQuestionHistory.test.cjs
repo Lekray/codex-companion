@@ -130,3 +130,45 @@ test('resume identity and malformed latest headers never expose another turn',()
   const h=harness();assert.equal(h.receive(h.root('full'),{data,nextCursor:null}),false);assert.equal(h.completed.length,0);
  }
 });
+
+test('inline full turns/list and resume abstain for each truncation marker on the turn or page',()=>{
+ const markers=[{truncated:true},{itemsTruncated:true},{summary:'condensed'}];
+ for(const marker of markers)for(const items of [[],[q()]]){
+  const direct=harness();
+  assert.equal(direct.meta(direct.root('full'),'turn',items,'full',marker),false);
+  assert.equal(direct.completed.length,0);
+  const resumed=harness(),r=resumed.track('thread/resume',{initialTurnsPage:{itemsView:'full'}});
+  assert.equal(resumed.receive(r,{thread:{id:'t'},initialTurnsPage:{data:[{id:'turn',status:'completed',startedAt:null,itemsView:'full',items,...marker}],nextCursor:null}}),false);
+  assert.equal(resumed.completed.length,0);
+  for(const method of ['turns','resume']){
+   const h=harness();
+   const page={data:[{id:'turn',status:'completed',startedAt:null,itemsView:'full',items}],nextCursor:null,...marker};
+   if(method==='turns')assert.equal(h.receive(h.root('full'),page),false);
+   else{const rr=h.track('thread/resume',{initialTurnsPage:{itemsView:'full'}});assert.equal(h.receive(rr,{thread:{id:'t'},initialTurnsPage:page}),false);}
+   assert.equal(h.completed.length,0);
+  }
+ }
+});
+
+test('unmarked empty and question-bearing full turns still prove complete evidence',()=>{
+ const empty=harness();assert.equal(empty.meta(empty.root('full'),'turn',[],'full'),true);assert.deepEqual(empty.completed[0].items,[]);
+ const good=harness();assert.equal(good.meta(good.root('full'),'turn',[q(),answer()],'full',{summary:null,truncated:false,itemsTruncated:false}),true);
+ assert.deepEqual(candidates(good.completed[0].items),[{itemId:'q',questionKeys:[key('q',1)]}]);
+ assert.equal(good.meta(good.root('full'),'turn',[q()],'full',{truncated:true}),false);assert.equal(good.completed.length,1);
+});
+
+test('item pages carrying truncation markers never complete a gap-free chain',()=>{
+ for(const marker of [{truncated:true},{itemsTruncated:true},{summary:'condensed'}]){
+  const h=harness();h.meta(h.root());
+  const r=h.track('thread/items/list',{turnId:'turn',sortDirection:'desc',cursor:null});
+  assert.equal(h.receive(r,{data:[{turnId:'turn',item:q()}],nextCursor:null,...marker}),false);
+  assert.equal(h.completed.length,0);
+  assert.equal(h.page(null,[q()],null),false);
+ }
+ const h=harness();h.meta(h.root());
+ const root=h.track('thread/turns/list',{itemsView:'summary',sortDirection:'desc',cursor:null});
+ assert.equal(h.receive(root,{data:[{id:'turn',status:'completed',startedAt:null,itemsView:'notLoaded'}],nextCursor:'older-turns'}),false);
+ assert.equal(h.page(null,[q()],'p2'),false);
+ assert.equal(h.page('p2',[answer()],null),true);
+ assert.deepEqual(candidates(h.completed[0].items),[{itemId:'q',questionKeys:[key('q',1)]}]);
+});
