@@ -13,7 +13,51 @@ const { createEngine } = require("../../scripts/companionPatchEngine.cjs");
 
 const INSTALLED =
   process.env.COMPANION_OFFICIAL_261021 ||
-  path.resolve(__dirname, "../../.artifacts/fixes-0210/originals");
+  path.resolve(__dirname, "../../.artifacts/autoscroll/originals");
+
+const INTEGRATION_ROOT = path.resolve(__dirname, "../../.artifacts/autoscroll/integration");
+
+const PRIOR_FILES = [
+  "package.json",
+  "out/extension.js",
+  "webview/assets/src-622b307a9baf.js",
+  "webview/assets/initialize-app-host-services.extension-f722db488e05.js",
+  "webview/assets/local-conversation-page-e49199d4fdb5.js",
+  "webview/assets/message-bus-4113ba7287d7.js",
+  "webview/assets/use-model-settings-aafcff4b111c.js",
+  "webview/assets/composer-content-8ab21f1a1982.js",
+  "webview/assets/composer-scope-f0dbf0e746b6.js",
+  "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js",
+  "webview/assets/app-initial-13f932cb2f13.js",
+];
+
+const PRIOR_ORIGINALS = {
+  "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
+  "out/extension.js": "a9cc6736cd2c2d22f6cf43fc5763d5f8a873e4f741f522b44a600b1926f4e627",
+  "webview/assets/src-622b307a9baf.js": "e4a82a9ee669473490d25c1f2b6f7b60abc4a1b193acb1f9c0a92e074dc81eb5",
+  "webview/assets/initialize-app-host-services.extension-f722db488e05.js": "7d62f3e00516acd50693610d449cdc92e25a4599a18ab2e9353f8ab537777d1c",
+  "webview/assets/local-conversation-page-e49199d4fdb5.js": "c3c836af38901935a6b1d8fe41dbcd0419c602a35b4d099338d862ab8c8e069a",
+  "webview/assets/message-bus-4113ba7287d7.js": "9536ce9674179537acc6ecb09a74a01af08b203f4eb812851ea05182311c3ff0",
+  "webview/assets/use-model-settings-aafcff4b111c.js": "23d2322fe24ae6d151e2fef55108942be50ca8b38aacd52e5102143bb2d1b47e",
+  "webview/assets/composer-content-8ab21f1a1982.js": "a4fbed28d7fbc35c755690023da6eba1ca656719bd2823a95684e47cfbdd3d01",
+  "webview/assets/composer-scope-f0dbf0e746b6.js": "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
+  "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b",
+  "webview/assets/app-initial-13f932cb2f13.js": "9852ece5b9a25906b654fa8cccd77873105fe1b88556b141fc35dc4062511629",
+};
+
+const PRIOR_DRAFTS = {
+  "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
+  "out/extension.js": "948a5583504f716a9a5efefe8a617111ea9228f60400f349726a9c5d325a9bda",
+  "webview/assets/src-622b307a9baf.js": "aa54b2c189367a50541a7ea27b3cfe05d5c476588d657f63543ce8eac681fdb2",
+  "webview/assets/initialize-app-host-services.extension-f722db488e05.js": "b7591760d7d1ca8ab64644151f2997617ac77d0ba9ccc139dd3881b59fe1f73c",
+  "webview/assets/local-conversation-page-e49199d4fdb5.js": "4a5b4d7414669edf6a57420f1ea3186fba9f505c0d4bc9491e528acf9f0bbcd1",
+  "webview/assets/message-bus-4113ba7287d7.js": "aae9bcfd81a37be141675a79ea670572fb8b7e041c2debddfacadc657c500db8",
+  "webview/assets/use-model-settings-aafcff4b111c.js": "4ed17b3232091dd85537be18301ab1bd3e9d7711b9524cc2444de7a201053f74",
+  "webview/assets/composer-content-8ab21f1a1982.js": "a3b91dee9230ab94d1518c90dc63e83d5284dba4b468ba0a58c2f68bb8c49cdc",
+  "webview/assets/composer-scope-f0dbf0e746b6.js": "79227c2014dd9a11ed1d2ab8ed6428723626245bea2791cc7b6af02b5d57507d",
+  "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "dc3e4c4bb1abf3b8b85ad2565e390eb4067a2f322becf038a1c9792ac03e3285",
+  "webview/assets/app-initial-13f932cb2f13.js": "3753642aab9026fe1fdf361530612b6a3864ec7c084e68778c6f7f003e7c549e",
+};
 
 const hasInstalled = fs.existsSync(path.join(INSTALLED, "package.json"));
 
@@ -24,20 +68,11 @@ test("SUPPORTED_VERSION and identity constants", () => {
   assert.equal(adapter.MANIFEST_SCHEMA, 3);
 });
 
-test("FILES is exactly the eleven pinned originals", () => {
-  assert.equal(adapter.FILES.length, 11);
+test("FILES is exactly the twelve pinned originals", () => {
+  assert.equal(adapter.FILES.length, 12);
   assert.deepEqual(adapter.FILES, [
-    "package.json",
-    "out/extension.js",
-    "webview/assets/src-622b307a9baf.js",
-    "webview/assets/initialize-app-host-services.extension-f722db488e05.js",
-    "webview/assets/local-conversation-page-e49199d4fdb5.js",
-    "webview/assets/message-bus-4113ba7287d7.js",
-    "webview/assets/use-model-settings-aafcff4b111c.js",
-    "webview/assets/composer-content-8ab21f1a1982.js",
-    "webview/assets/composer-scope-f0dbf0e746b6.js",
-    "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js",
-    "webview/assets/app-initial-13f932cb2f13.js",
+    ...PRIOR_FILES,
+    "webview/assets/local-conversation-thread-a37d62aef644.js",
   ]);
   for (const rel of adapter.FILES) {
     assert.match(adapter.ORIGINAL_HASHES[rel], /^[0-9a-f]{64}$/);
@@ -45,7 +80,7 @@ test("FILES is exactly the eleven pinned originals", () => {
   }
 });
 
-test("STAGES and FEATURES match the required nine feature IDs", () => {
+test("STAGES and FEATURES match the required ten feature IDs", () => {
   assert.deepEqual(adapter.STAGES, ["original", "history", "titles", "workflow", "drafts"]);
   assert.deepEqual(
     adapter.FEATURES.map((f) => f.id),
@@ -59,6 +94,7 @@ test("STAGES and FEATURES match the required nine feature IDs", () => {
       "independent-drafts",
       "webview-recovery",
       "preload-index",
+      "autoscroll",
     ]
   );
   for (const feature of adapter.FEATURES) {
@@ -74,6 +110,10 @@ test("STAGES and FEATURES match the required nine feature IDs", () => {
     adapter.FEATURES.find((f) => f.id === "preload-index"),
     { id: "preload-index", stage: "drafts", files: [adapter.PRELOAD_FILE] }
   );
+  assert.deepEqual(
+    adapter.FEATURES.find((f) => f.id === "autoscroll"),
+    { id: "autoscroll", stage: "drafts", files: [adapter.AUTOSCROLL_FILE] }
+  );
 });
 
 test("the preload index transform is pinned to the new official target", () => {
@@ -81,6 +121,13 @@ test("the preload index transform is pinned to the new official target", () => {
   assert.equal(adapter.PRELOAD_FILE, preload.FILE);
   assert.equal(adapter.PRELOAD_FILE, "webview/assets/app-initial-13f932cb2f13.js");
   assert.equal(adapter.ORIGINAL_HASHES[adapter.PRELOAD_FILE], preload.ORIGINAL_HASH);
+});
+
+test("the autoscroll transform is pinned to the twelfth official target", () => {
+  const autoscroll = require("../../scripts/officialAutoscroll.cjs");
+  assert.equal(adapter.AUTOSCROLL_FILE, autoscroll.FILE);
+  assert.equal(adapter.AUTOSCROLL_FILE, "webview/assets/local-conversation-thread-a37d62aef644.js");
+  assert.equal(adapter.ORIGINAL_HASHES[adapter.AUTOSCROLL_FILE], autoscroll.ORIGINAL_HASH);
 });
 
 test("transformStage rejects unknown file and unknown stage", () => {
@@ -108,6 +155,9 @@ test("per-stage unaffected files are returned unchanged", () => {
   assert.equal(adapter.transformStage(adapter.PRELOAD_FILE, sentinel, "history"), sentinel);
   assert.equal(adapter.transformStage(adapter.PRELOAD_FILE, sentinel, "titles"), sentinel);
   assert.equal(adapter.transformStage(adapter.PRELOAD_FILE, sentinel, "workflow"), sentinel);
+  assert.equal(adapter.transformStage(adapter.AUTOSCROLL_FILE, sentinel, "history"), sentinel);
+  assert.equal(adapter.transformStage(adapter.AUTOSCROLL_FILE, sentinel, "titles"), sentinel);
+  assert.equal(adapter.transformStage(adapter.AUTOSCROLL_FILE, sentinel, "workflow"), sentinel);
 });
 
 test("status runtime aliases are rewritten for the new host", () => {
@@ -250,6 +300,24 @@ test("draft stage applies the pinned preload index transform only to its target"
   assert.ok(drafts.includes("if(r?h.has(t):u.has(t))return;"));
 });
 
+test("draft stage applies the pinned autoscroll transform only to its target", { skip: !hasInstalled }, () => {
+  const autoscroll = require("../../scripts/officialAutoscroll.cjs");
+  const source = fs.readFileSync(path.join(INSTALLED, adapter.AUTOSCROLL_FILE), "utf8");
+  const drafts = adapter.transformStage(adapter.AUTOSCROLL_FILE, source, "drafts");
+  assert.equal(drafts, autoscroll.transform(source));
+  assert.equal(adapter.sha256(drafts), autoscroll.PATCHED_HASH);
+  assert.ok(drafts.includes("getLastScrollDistanceFromBottomPx"));
+});
+
+test("the prior eleven originals and final drafts hashes stay byte-identical", { skip: !hasInstalled }, () => {
+  assert.deepEqual(adapter.FILES.slice(0, 11), PRIOR_FILES);
+  const manifest = adapter.buildManifest(INSTALLED);
+  for (const rel of PRIOR_FILES) {
+    assert.equal(manifest.stages.original[rel], PRIOR_ORIGINALS[rel], `original ${rel}`);
+    assert.equal(manifest.stages.drafts[rel], PRIOR_DRAFTS[rel], `drafts ${rel}`);
+  }
+});
+
 test("missing anchor throws", { skip: !hasInstalled }, () => {
   const host = fs.readFileSync(path.join(INSTALLED, adapter.HOST), "utf8");
   const corrupted = host.replace(
@@ -274,7 +342,7 @@ test("duplicate anchor throws", { skip: !hasInstalled }, () => {
 });
 
 test("verifyTransforms syntax-checks every generated program", { skip: !hasInstalled }, () => {
-  const workDir = path.join(__dirname, "..", "..", ".artifacts", "fixes-0210", "integration", "adapter-work", "test-generated");
+  const workDir = path.join(INTEGRATION_ROOT, "adapter-work", "test-generated");
   const report = adapter.verifyTransforms(INSTALLED, workDir);
   for (const rel of adapter.FILES) {
     assert.equal(report[rel].syntax, "ok");
@@ -282,9 +350,9 @@ test("verifyTransforms syntax-checks every generated program", { skip: !hasInsta
   }
 });
 
-test("eleven-target engine rejects missing and mixed preload targets without writing", { skip: !hasInstalled }, async (t) => {
+test("twelve-target engine rejects missing and mixed preload targets without writing", { skip: !hasInstalled }, async (t) => {
   const preload = require("../../scripts/officialPreloadIndex.cjs");
-  const fixtureRoot = path.join(__dirname, "..", "..", ".artifacts", "fixes-0210", "integration", "engine-fixtures");
+  const fixtureRoot = path.join(INTEGRATION_ROOT, "engine-fixtures");
   fs.mkdirSync(fixtureRoot, { recursive: true });
   const root = fs.mkdtempSync(path.join(fixtureRoot, "engine-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -309,7 +377,7 @@ test("eleven-target engine rejects missing and mixed preload targets without wri
     const fresh = await engine.check({ extDir });
     assert.equal(
       fresh.backup.path,
-      path.join(process.env.LOCALAPPDATA, "codex-companion", "patches", adapter.SUPPORTED_VERSION, "chunks-v3"),
+      path.join(process.env.LOCALAPPDATA, "codex-companion", "patches", adapter.SUPPORTED_VERSION, "chunks-v4"),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
@@ -332,6 +400,43 @@ test("eleven-target engine rejects missing and mixed preload targets without wri
   assert.deepEqual(snapshot(), adapter.FILES.map((rel) =>
     rel === adapter.PRELOAD_FILE
       ? adapter.sha256(preload.transform(fs.readFileSync(path.join(INSTALLED, ...rel.split("/")), "utf8")))
+      : adapter.ORIGINAL_HASHES[rel]
+  ));
+});
+
+test("twelve-target engine rejects missing and mixed autoscroll targets without writing", { skip: !hasInstalled }, async (t) => {
+  const autoscroll = require("../../scripts/officialAutoscroll.cjs");
+  const fixtureRoot = path.join(INTEGRATION_ROOT, "engine-autoscroll-fixtures");
+  fs.mkdirSync(fixtureRoot, { recursive: true });
+  const root = fs.mkdtempSync(path.join(fixtureRoot, "engine-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const extDir = path.join(root, "extension");
+  fs.cpSync(INSTALLED, extDir, { recursive: true });
+  const backupDir = path.join(root, "backup");
+  const engine = createEngine(adapter);
+  const autoscrollPath = path.join(extDir, ...adapter.AUTOSCROLL_FILE.split("/"));
+  const originalBytes = fs.readFileSync(path.join(INSTALLED, ...adapter.AUTOSCROLL_FILE.split("/")));
+  const snapshot = () =>
+    adapter.FILES.map((rel) => adapter.sha256(fs.readFileSync(path.join(extDir, ...rel.split("/")))));
+
+  fs.rmSync(autoscrollPath);
+  const missing = await engine.check({ extDir, backupDir });
+  assert.equal(missing.code, "missing-file");
+  assert.equal(missing.canInstall, false);
+  assert.equal(missing.canRestore, false);
+  assert.equal(missing.features.find((f) => f.id === "autoscroll").status, "unverified");
+
+  fs.writeFileSync(autoscrollPath, autoscroll.transform(originalBytes.toString("utf8")));
+  const mixed = await engine.check({ extDir, backupDir });
+  assert.equal(mixed.state, "mixed");
+  assert.equal(mixed.code, "mixed");
+  assert.equal(mixed.canInstall, false);
+  assert.equal(mixed.canRestore, false);
+  assert.equal(fs.existsSync(backupDir), false);
+  assert.deepEqual(snapshot(), adapter.FILES.map((rel) =>
+    rel === adapter.AUTOSCROLL_FILE
+      ? adapter.sha256(autoscroll.transform(originalBytes.toString("utf8")))
       : adapter.ORIGINAL_HASHES[rel]
   ));
 });

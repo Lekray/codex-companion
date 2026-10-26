@@ -16,9 +16,8 @@ const {
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const FIXTURE_ROOT = path.join(
   REPO_ROOT,
-  '.artifacts',
-  'webview-recovery',
-  'integration',
+  'dist',
+  'autoscroll-integration',
   'installer-work',
   'version-fixtures',
 );
@@ -468,7 +467,7 @@ function loadRealNewSpec() {
   try {
     const value = require('../../scripts/official261021.cjs');
     if (!value || typeof value.SUPPORTED_VERSION !== 'string') return null;
-    if (!Array.isArray(value.FILES) || value.FILES.length !== 11) return null;
+    if (!Array.isArray(value.FILES) || value.FILES.length !== 12) return null;
     if (!value.ORIGINAL_HASHES || typeof value.ORIGINAL_HASHES !== 'object') return null;
     return value;
   } catch {
@@ -555,7 +554,7 @@ test('public facade routes the new official version to its own pinned engine', a
       'codex-companion',
       'patches',
       spec.SUPPORTED_VERSION,
-      'chunks-v3',
+      'chunks-v4',
     ),
   );
 });

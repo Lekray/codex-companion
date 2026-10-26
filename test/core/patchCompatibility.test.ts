@@ -9,6 +9,7 @@ import {
   SCHEMA3_FILES,
   SCHEMA3_FILES10,
   SCHEMA3_FILES11,
+  SCHEMA3_FILES12,
   SCHEMA3_OFFICIAL_VERSION,
   compatibilityFilesForVersion,
   inspectOfficialPatch,
@@ -58,16 +59,17 @@ function findProjectRoot(start: string): string {
   }
 }
 
-const FIXTURE_ROOT = join(findProjectRoot(__dirname), '.artifacts', 'workflow-v15', 'compatibility');
+const FIXTURE_ROOT = join(findProjectRoot(__dirname), '.artifacts', 'autoscroll', 'integration', 'compatibility');
 const SCHEMA3_FIXTURE_ROOT = join(
   findProjectRoot(__dirname),
   '.artifacts',
-  'fixes-0210',
+  'autoscroll',
   'integration',
-  'compatibility',
+  'compatibility-schema3',
 );
 const PRELOAD_FILE = 'webview/assets/app-initial-13f932cb2f13.js';
 const RECOVERY_FILE = 'webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js';
+const AUTOSCROLL_FILE = 'webview/assets/local-conversation-thread-a37d62aef644.js';
 
 async function fixture(
   t: TestContext,
@@ -273,10 +275,11 @@ test('schema 2 requires and verifies the additional composer bundle', async t =>
   assert.equal((await inspectOfficialPatch(directory,{...expected,schema:1})).code,'manifest');
 });
 
-test('schema 3 requires the exact eleven-target set including the preload index', async t => {
+test('schema 3 requires the exact twelve-target set including autoscroll', async t => {
+  assert.deepEqual([...SCHEMA3_FILES12], [...SCHEMA3_FILES11, AUTOSCROLL_FILE]);
   assert.deepEqual([...SCHEMA3_FILES11], [...SCHEMA3_FILES10, PRELOAD_FILE]);
   assert.deepEqual([...SCHEMA3_FILES10], [...SCHEMA3_FILES, RECOVERY_FILE]);
-  assert.deepEqual(compatibilityFilesForVersion(SCHEMA3_OFFICIAL_VERSION), [...SCHEMA3_FILES11]);
+  assert.deepEqual(compatibilityFilesForVersion(SCHEMA3_OFFICIAL_VERSION), [...SCHEMA3_FILES12]);
 
   const files: Record<string, string> = {
     'package.json': JSON.stringify({
@@ -285,16 +288,16 @@ test('schema 3 requires the exact eleven-target set including the preload index'
       version: SCHEMA3_OFFICIAL_VERSION,
     }),
   };
-  for (const rel of SCHEMA3_FILES11) {
+  for (const rel of SCHEMA3_FILES12) {
     if (rel !== 'package.json') files[rel] = `official schema 3 bundle ${rel}`;
   }
   const directory = await fixture(t, files, SCHEMA3_FIXTURE_ROOT);
   const hashes: Record<string, string> = {};
-  for (const rel of SCHEMA3_FILES11) hashes[rel] = sha256(files[rel]!);
+  for (const rel of SCHEMA3_FILES12) hashes[rel] = sha256(files[rel]!);
   const valid: PatchAttestation = {
     schema: 3,
     officialVersion: SCHEMA3_OFFICIAL_VERSION,
-    features: ['preload-index'],
+    features: ['preload-index', 'autoscroll'],
     files: hashes,
   };
   assert.equal((await inspectOfficialPatch(directory, valid)).code, 'ok');
@@ -304,6 +307,15 @@ test('schema 3 requires the exact eleven-target set including the preload index'
   const missing = await inspectOfficialPatch(directory, { ...valid, files: missingPreload });
   assert.equal(missing.code, 'manifest');
   assert.ok(missing.issues.some(issue => issue.includes(PRELOAD_FILE)));
+
+  const missingAutoscroll = { ...hashes };
+  delete missingAutoscroll[AUTOSCROLL_FILE];
+  const missingAutoscrollTarget = await inspectOfficialPatch(directory, {
+    ...valid,
+    files: missingAutoscroll,
+  });
+  assert.equal(missingAutoscrollTarget.code, 'manifest');
+  assert.ok(missingAutoscrollTarget.issues.some(issue => issue.includes(AUTOSCROLL_FILE)));
 
   const extraTarget = await inspectOfficialPatch(directory, {
     ...valid,

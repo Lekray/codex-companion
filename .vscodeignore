@@ -18,6 +18,7 @@ test/**
 dist/test/**
 dist/scripts/**
 dist/project-history-probe/**
+dist/autoscroll-integration/**
 **/*.map
 tsconfig.json
 codex-companion.code-workspace
@@ -27,3 +28,4 @@ node_modules/typescript/**
 node_modules/@types/**
 !scripts/officialDraftTransform.cjs
 !scripts/officialPreloadIndex.cjs
+!scripts/officialAutoscroll.cjs

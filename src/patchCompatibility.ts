@@ -48,6 +48,11 @@ export const SCHEMA3_FILES11 = [
   ...SCHEMA3_FILES10,
   'webview/assets/app-initial-13f932cb2f13.js',
 ] as const;
+/** Current 0.2.11 schema-3 target set, adding the latest-answer autoscroll bundle. */
+export const SCHEMA3_FILES12 = [
+  ...SCHEMA3_FILES11,
+  'webview/assets/local-conversation-thread-a37d62aef644.js',
+] as const;
 export const LEGACY_ATTESTATION_FILE = 'patchAttestation.json';
 export const VERSIONED_ATTESTATION_FILES: Readonly<Record<string, string>> = {
   '26.1007.21434': LEGACY_ATTESTATION_FILE,
@@ -56,7 +61,7 @@ export const VERSIONED_ATTESTATION_FILES: Readonly<Record<string, string>> = {
 const LEGACY_COMPATIBILITY_FILES = [...REQUIRED_FILES, COMPOSER_DRAFT_BUNDLE] as const;
 const COMPATIBILITY_FILES_BY_VERSION: Readonly<Record<string, readonly string[]>> = {
   '26.1007.21434': LEGACY_COMPATIBILITY_FILES,
-  [SCHEMA3_OFFICIAL_VERSION]: SCHEMA3_FILES11,
+  [SCHEMA3_OFFICIAL_VERSION]: SCHEMA3_FILES12,
 };
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
 const OFFICIAL_PUBLISHER = 'openai';
@@ -110,10 +115,10 @@ function validateAttestation(value: unknown): ValidatedAttestation {
 
   if (schema !== 1 && schema !== 2 && schema !== 3) issues.push('Attestation schema must be 1, 2 or 3.');
   const requiredFiles: readonly string[] = schema === 3
-    ? SCHEMA3_FILES11
+    ? SCHEMA3_FILES12
     : schema === 2 ? LEGACY_COMPATIBILITY_FILES : REQUIRED_FILES;
   const requiredFileSet: ReadonlySet<string> = schema === 3
-    ? new Set(SCHEMA3_FILES11)
+    ? new Set(SCHEMA3_FILES12)
     : schema === 2 ? new Set(LEGACY_COMPATIBILITY_FILES) : REQUIRED_FILE_SET;
   if (typeof officialVersion !== 'string' || officialVersion.trim() === '') {
     issues.push('Attestation officialVersion must be a non-empty string.');

@@ -288,6 +288,15 @@ test('preload-index reports an accurate translated feature label', () => {
   assert.match(renderMaintenanceReport(value, false), /Faster chat opening/);
 });
 
+test('autoscroll reports an accurate translated feature label', () => {
+  const value = report({
+    state: 'drafts',
+    features: [...FEATURES, { id: 'autoscroll', status: 'installed' as const }],
+  });
+  assert.match(renderMaintenanceReport(value, true), /\u0410\u0432\u0442\u043e\u043f\u0440\u043e\u043a\u0440\u0443\u0442\u043a\u0430/);
+  assert.match(renderMaintenanceReport(value, false), /Latest-answer autoscroll/);
+});
+
 test('a completed operation releases its guard before its information toast is dismissed', async () => {
   let dismiss!: (value: undefined) => void;
   const informationPending = new Promise<undefined>(resolve => { dismiss = resolve; });

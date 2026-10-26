@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import {
   SCHEMA3_FILES,
-  SCHEMA3_FILES11,
+  SCHEMA3_FILES12,
   SCHEMA3_OFFICIAL_VERSION,
   attestationFileForVersion,
   compatibilityFilesForVersion,
@@ -41,7 +41,7 @@ function packageJson(version: string): string {
 
 function officialFiles(version: string): Record<string, string> {
   const files: Record<string, string> = { 'package.json': packageJson(version) };
-  for (const rel of SCHEMA3_FILES11) {
+  for (const rel of SCHEMA3_FILES12) {
     if (rel !== 'package.json') files[rel] = `official bundle ${rel}`;
   }
   return files;
@@ -59,7 +59,7 @@ function attestation(
   version: string,
   files: Record<string, string>,
   schema: 1 | 2 | 3 = 3,
-  targets: readonly string[] = SCHEMA3_FILES11,
+  targets: readonly string[] = SCHEMA3_FILES12,
 ): PatchAttestation {
   const hashes: Record<string, string> = {};
   for (const rel of targets) hashes[rel] = sha256(files[rel] ?? '');
@@ -130,13 +130,13 @@ function uiDependencies(
 test('exact eleven-file schema 3 attestation for 26.1021 is compatible and read-only', async t => {
   const files = officialFiles(NEW_VERSION);
   const directory = await fixture(t, files);
-  const before = await Promise.all(SCHEMA3_FILES11.map(file => readFile(filePath(directory, file))));
+  const before = await Promise.all(SCHEMA3_FILES12.map(file => readFile(filePath(directory, file))));
 
   const result = await inspectOfficialPatch(directory, attestation(NEW_VERSION, files));
 
   assert.deepEqual(result, { ok: true, code: 'ok', version: NEW_VERSION, issues: [] });
   assert.deepEqual(
-    await Promise.all(SCHEMA3_FILES11.map(file => readFile(filePath(directory, file)))),
+    await Promise.all(SCHEMA3_FILES12.map(file => readFile(filePath(directory, file)))),
     before,
   );
 });
@@ -202,8 +202,8 @@ test('attestation resources stay legacy by default and select the 26.1021 file e
     ...LEGACY_FILES,
     'webview/assets/app-initial-7a199c66e670.js',
   ]);
-  assert.deepEqual(compatibilityFilesForVersion(NEW_VERSION), [...SCHEMA3_FILES11]);
-  assert.deepEqual([...SCHEMA3_FILES11], [...SCHEMA3_FILES, RECOVERY_FILE, 'webview/assets/app-initial-13f932cb2f13.js']);
+  assert.deepEqual(compatibilityFilesForVersion(NEW_VERSION), [...SCHEMA3_FILES12]);
+  assert.deepEqual([...SCHEMA3_FILES12], [...SCHEMA3_FILES, RECOVERY_FILE, 'webview/assets/app-initial-13f932cb2f13.js', 'webview/assets/local-conversation-thread-a37d62aef644.js']);
   assert.deepEqual(compatibilityFilesForVersion('26.2000.1'), compatibilityFilesForVersion(OLD_VERSION));
 });
 

@@ -12,6 +12,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const recovery = require("./officialWebviewRecovery.cjs");
 const preload = require("./officialPreloadIndex.cjs");
+const autoscroll = require("./officialAutoscroll.cjs");
 
 const PUBLISHER = "openai";
 const NAME = "chatgpt";
@@ -31,6 +32,7 @@ const COMPOSER_CONTENT = "webview/assets/composer-content-8ab21f1a1982.js";
 const COMPOSER_SCOPE = "webview/assets/composer-scope-f0dbf0e746b6.js";
 const RECOVERY_FILE = recovery.FILE;
 const PRELOAD_FILE = preload.FILE;
+const AUTOSCROLL_FILE = autoscroll.FILE;
 
 if (recovery.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
   throw new Error(
@@ -40,6 +42,11 @@ if (recovery.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
 if (preload.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
   throw new Error(
     "preload index pins " + preload.SUPPORTED_VERSION + ", expected " + SUPPORTED_VERSION
+  );
+}
+if (autoscroll.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
+  throw new Error(
+    "autoscroll pins " + autoscroll.SUPPORTED_VERSION + ", expected " + SUPPORTED_VERSION
   );
 }
 
@@ -55,6 +62,7 @@ const FILES = Object.freeze([
   COMPOSER_SCOPE,
   RECOVERY_FILE,
   PRELOAD_FILE,
+  AUTOSCROLL_FILE,
 ]);
 
 const ORIGINAL_HASHES = Object.freeze({
@@ -78,6 +86,7 @@ const ORIGINAL_HASHES = Object.freeze({
     "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
   [RECOVERY_FILE]: recovery.ORIGINAL_HASH,
   [PRELOAD_FILE]: preload.ORIGINAL_HASH,
+  [AUTOSCROLL_FILE]: autoscroll.ORIGINAL_HASH,
 });
 
 const STAGES = Object.freeze([
@@ -98,6 +107,7 @@ const FEATURES = Object.freeze([
   { id: "independent-drafts", stage: "drafts", files: [COMPOSER_SCOPE] },
   { id: "webview-recovery", stage: "drafts", files: [RECOVERY_FILE] },
   { id: "preload-index", stage: "drafts", files: [PRELOAD_FILE] },
+  { id: "autoscroll", stage: "drafts", files: [AUTOSCROLL_FILE] },
 ]);
 
 function resourcesDir() {
@@ -734,6 +744,7 @@ function applyDrafts(file, text) {
   if (file === COMPOSER_SCOPE) return transformDraftsScope(text);
   if (file === RECOVERY_FILE) return recovery.transform(text);
   if (file === PRELOAD_FILE) return preload.transform(text);
+  if (file === AUTOSCROLL_FILE) return autoscroll.transform(text);
   return text;
 }
 
@@ -904,6 +915,7 @@ module.exports = {
   COMPOSER_SCOPE,
   RECOVERY_FILE,
   PRELOAD_FILE,
+  AUTOSCROLL_FILE,
   sha256,
   replaceOnce,
   rewriteAliases,
