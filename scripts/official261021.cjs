@@ -13,6 +13,7 @@ const path = require("node:path");
 const recovery = require("./officialWebviewRecovery.cjs");
 const preload = require("./officialPreloadIndex.cjs");
 const autoscroll = require("./officialAutoscroll.cjs");
+const composerRecovery = require("./officialComposerRecovery.cjs");
 
 const PUBLISHER = "openai";
 const NAME = "chatgpt";
@@ -33,6 +34,10 @@ const COMPOSER_SCOPE = "webview/assets/composer-scope-f0dbf0e746b6.js";
 const RECOVERY_FILE = recovery.FILE;
 const PRELOAD_FILE = preload.FILE;
 const AUTOSCROLL_FILE = autoscroll.FILE;
+const COMPOSER_RECOVERY_FILE = composerRecovery.FILE;
+if (composerRecovery.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
+  throw new Error("composer recovery pins an unexpected official version");
+}
 
 if (recovery.SUPPORTED_VERSION !== SUPPORTED_VERSION) {
   throw new Error(
@@ -63,6 +68,7 @@ const FILES = Object.freeze([
   RECOVERY_FILE,
   PRELOAD_FILE,
   AUTOSCROLL_FILE,
+  COMPOSER_RECOVERY_FILE,
 ]);
 
 const ORIGINAL_HASHES = Object.freeze({
@@ -87,6 +93,7 @@ const ORIGINAL_HASHES = Object.freeze({
   [RECOVERY_FILE]: recovery.ORIGINAL_HASH,
   [PRELOAD_FILE]: preload.ORIGINAL_HASH,
   [AUTOSCROLL_FILE]: autoscroll.ORIGINAL_HASH,
+  [COMPOSER_RECOVERY_FILE]: composerRecovery.ORIGINAL_HASH,
 });
 
 const STAGES = Object.freeze([
@@ -108,6 +115,7 @@ const FEATURES = Object.freeze([
   { id: "webview-recovery", stage: "drafts", files: [RECOVERY_FILE] },
   { id: "preload-index", stage: "drafts", files: [PRELOAD_FILE] },
   { id: "autoscroll", stage: "drafts", files: [AUTOSCROLL_FILE] },
+  { id: "composer-recovery", stage: "drafts", files: [COMPOSER_RECOVERY_FILE] },
 ]);
 
 function resourcesDir() {
@@ -745,6 +753,7 @@ function applyDrafts(file, text) {
   if (file === RECOVERY_FILE) return recovery.transform(text);
   if (file === PRELOAD_FILE) return preload.transform(text);
   if (file === AUTOSCROLL_FILE) return autoscroll.transform(text);
+  if (file === COMPOSER_RECOVERY_FILE) return composerRecovery.transform(text);
   return text;
 }
 
@@ -916,6 +925,7 @@ module.exports = {
   RECOVERY_FILE,
   PRELOAD_FILE,
   AUTOSCROLL_FILE,
+  COMPOSER_RECOVERY_FILE,
   sha256,
   replaceOnce,
   rewriteAliases,

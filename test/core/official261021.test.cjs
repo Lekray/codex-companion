@@ -13,9 +13,9 @@ const { createEngine } = require("../../scripts/companionPatchEngine.cjs");
 
 const INSTALLED =
   process.env.COMPANION_OFFICIAL_261021 ||
-  path.resolve(__dirname, "../../.artifacts/autoscroll/originals");
+  path.resolve(__dirname, "../../.artifacts/composer-recovery/originals");
 
-const INTEGRATION_ROOT = path.resolve(__dirname, "../../.artifacts/autoscroll/integration");
+const INTEGRATION_ROOT = path.resolve(__dirname, "../../.artifacts/composer-recovery/integration");
 
 const PRIOR_FILES = [
   "package.json",
@@ -29,6 +29,7 @@ const PRIOR_FILES = [
   "webview/assets/composer-scope-f0dbf0e746b6.js",
   "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js",
   "webview/assets/app-initial-13f932cb2f13.js",
+  "webview/assets/local-conversation-thread-a37d62aef644.js",
 ];
 
 const PRIOR_ORIGINALS = {
@@ -43,6 +44,7 @@ const PRIOR_ORIGINALS = {
   "webview/assets/composer-scope-f0dbf0e746b6.js": "02fe29bd8b1da9a86c6c39a95f69af9b60a8c76c37535ecd5e0b92fbc45243fd",
   "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "6295d2141f11872bb070e03049e326a7cc340bd6ffdb3761f5a80bea88ba186b",
   "webview/assets/app-initial-13f932cb2f13.js": "9852ece5b9a25906b654fa8cccd77873105fe1b88556b141fc35dc4062511629",
+  "webview/assets/local-conversation-thread-a37d62aef644.js": "2fcd72651c746aed39703185eecc59e285479db3a7a5710e326c2810da1ed563",
 };
 
 const PRIOR_DRAFTS = {
@@ -57,6 +59,7 @@ const PRIOR_DRAFTS = {
   "webview/assets/composer-scope-f0dbf0e746b6.js": "79227c2014dd9a11ed1d2ab8ed6428723626245bea2791cc7b6af02b5d57507d",
   "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "dc3e4c4bb1abf3b8b85ad2565e390eb4067a2f322becf038a1c9792ac03e3285",
   "webview/assets/app-initial-13f932cb2f13.js": "3753642aab9026fe1fdf361530612b6a3864ec7c084e68778c6f7f003e7c549e",
+  "webview/assets/local-conversation-thread-a37d62aef644.js": "670ec720c734332d68050319cc047bd853dd6ddbea0edeab10effe0db6d81ed4",
 };
 
 const hasInstalled = fs.existsSync(path.join(INSTALLED, "package.json"));
@@ -68,11 +71,11 @@ test("SUPPORTED_VERSION and identity constants", () => {
   assert.equal(adapter.MANIFEST_SCHEMA, 3);
 });
 
-test("FILES is exactly the twelve pinned originals", () => {
-  assert.equal(adapter.FILES.length, 12);
+test("FILES is exactly the thirteen pinned originals", () => {
+  assert.equal(adapter.FILES.length, 13);
   assert.deepEqual(adapter.FILES, [
     ...PRIOR_FILES,
-    "webview/assets/local-conversation-thread-a37d62aef644.js",
+    "webview/assets/thread-composer-content-lazy-720f6fb84454.js",
   ]);
   for (const rel of adapter.FILES) {
     assert.match(adapter.ORIGINAL_HASHES[rel], /^[0-9a-f]{64}$/);
@@ -80,7 +83,7 @@ test("FILES is exactly the twelve pinned originals", () => {
   }
 });
 
-test("STAGES and FEATURES match the required ten feature IDs", () => {
+test("STAGES and FEATURES match the required eleven feature IDs", () => {
   assert.deepEqual(adapter.STAGES, ["original", "history", "titles", "workflow", "drafts"]);
   assert.deepEqual(
     adapter.FEATURES.map((f) => f.id),
@@ -95,6 +98,7 @@ test("STAGES and FEATURES match the required ten feature IDs", () => {
       "webview-recovery",
       "preload-index",
       "autoscroll",
+      "composer-recovery",
     ]
   );
   for (const feature of adapter.FEATURES) {
@@ -309,8 +313,8 @@ test("draft stage applies the pinned autoscroll transform only to its target", {
   assert.ok(drafts.includes("getLastScrollDistanceFromBottomPx"));
 });
 
-test("the prior eleven originals and final drafts hashes stay byte-identical", { skip: !hasInstalled }, () => {
-  assert.deepEqual(adapter.FILES.slice(0, 11), PRIOR_FILES);
+test("the prior twelve originals and final drafts hashes stay byte-identical", { skip: !hasInstalled }, () => {
+  assert.deepEqual(adapter.FILES.slice(0, 12), PRIOR_FILES);
   const manifest = adapter.buildManifest(INSTALLED);
   for (const rel of PRIOR_FILES) {
     assert.equal(manifest.stages.original[rel], PRIOR_ORIGINALS[rel], `original ${rel}`);
@@ -350,7 +354,7 @@ test("verifyTransforms syntax-checks every generated program", { skip: !hasInsta
   }
 });
 
-test("twelve-target engine rejects missing and mixed preload targets without writing", { skip: !hasInstalled }, async (t) => {
+test("thirteen-target engine rejects missing and mixed preload targets without writing", { skip: !hasInstalled }, async (t) => {
   const preload = require("../../scripts/officialPreloadIndex.cjs");
   const fixtureRoot = path.join(INTEGRATION_ROOT, "engine-fixtures");
   fs.mkdirSync(fixtureRoot, { recursive: true });
@@ -377,7 +381,7 @@ test("twelve-target engine rejects missing and mixed preload targets without wri
     const fresh = await engine.check({ extDir });
     assert.equal(
       fresh.backup.path,
-      path.join(process.env.LOCALAPPDATA, "codex-companion", "patches", adapter.SUPPORTED_VERSION, "chunks-v4"),
+      path.join(process.env.LOCALAPPDATA, "codex-companion", "patches", adapter.SUPPORTED_VERSION, "chunks-v5"),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
@@ -404,7 +408,7 @@ test("twelve-target engine rejects missing and mixed preload targets without wri
   ));
 });
 
-test("twelve-target engine rejects missing and mixed autoscroll targets without writing", { skip: !hasInstalled }, async (t) => {
+test("thirteen-target engine rejects missing and mixed autoscroll targets without writing", { skip: !hasInstalled }, async (t) => {
   const autoscroll = require("../../scripts/officialAutoscroll.cjs");
   const fixtureRoot = path.join(INTEGRATION_ROOT, "engine-autoscroll-fixtures");
   fs.mkdirSync(fixtureRoot, { recursive: true });
@@ -439,4 +443,53 @@ test("twelve-target engine rejects missing and mixed autoscroll targets without 
       ? adapter.sha256(autoscroll.transform(originalBytes.toString("utf8")))
       : adapter.ORIGINAL_HASHES[rel]
   ));
+});
+
+test("thirteen-target engine rejects missing and mixed composer recovery targets without writing", { skip: !hasInstalled }, async (t) => {
+  const composerRecovery = require("../../scripts/officialComposerRecovery.cjs");
+  const fixtureRoot = path.join(INTEGRATION_ROOT, "engine-composer-recovery-fixtures");
+  fs.mkdirSync(fixtureRoot, { recursive: true });
+  const root = fs.mkdtempSync(path.join(fixtureRoot, "engine-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const extDir = path.join(root, "extension");
+  fs.cpSync(INSTALLED, extDir, { recursive: true });
+  const backupDir = path.join(root, "backup");
+  const engine = createEngine(adapter);
+  const composerRecoveryPath = path.join(extDir, ...adapter.COMPOSER_RECOVERY_FILE.split("/"));
+  const originalBytes = fs.readFileSync(path.join(INSTALLED, ...adapter.COMPOSER_RECOVERY_FILE.split("/")));
+  const snapshot = () =>
+    adapter.FILES.map((rel) => adapter.sha256(fs.readFileSync(path.join(extDir, ...rel.split("/")))));
+
+  fs.rmSync(composerRecoveryPath);
+  const missing = await engine.check({ extDir, backupDir });
+  assert.equal(missing.code, "missing-file");
+  assert.equal(missing.canInstall, false);
+  assert.equal(missing.canRestore, false);
+  assert.equal(missing.features.find((f) => f.id === "composer-recovery").status, "unverified");
+
+  fs.writeFileSync(composerRecoveryPath, composerRecovery.transform(originalBytes.toString("utf8")));
+  const mixed = await engine.check({ extDir, backupDir });
+  assert.equal(mixed.state, "mixed");
+  assert.equal(mixed.code, "mixed");
+  assert.equal(mixed.canInstall, false);
+  assert.equal(mixed.canRestore, false);
+  assert.equal(fs.existsSync(backupDir), false);
+  assert.deepEqual(snapshot(), adapter.FILES.map((rel) =>
+    rel === adapter.COMPOSER_RECOVERY_FILE
+      ? adapter.sha256(composerRecovery.transform(originalBytes.toString("utf8")))
+      : adapter.ORIGINAL_HASHES[rel]
+  ));
+});
+
+test("composer recovery is pinned and only participates in the final stage", { skip: !hasInstalled }, () => {
+  const recovery = require("../../scripts/officialComposerRecovery.cjs");
+  assert.equal(adapter.COMPOSER_RECOVERY_FILE, recovery.FILE);
+  assert.equal(adapter.ORIGINAL_HASHES[recovery.FILE], recovery.ORIGINAL_HASH);
+  assert.deepEqual(adapter.FEATURES.find(f => f.id === "composer-recovery"), {id: "composer-recovery", stage: "drafts", files: [recovery.FILE]});
+  for (const stage of ["original", "history", "titles", "workflow"]) assert.equal(adapter.transformStage(recovery.FILE, "sentinel", stage), "sentinel");
+  const original = fs.readFileSync(path.join(INSTALLED, recovery.FILE), "utf8");
+  assert.equal(adapter.transformStage(recovery.FILE, original, "drafts"), recovery.transform(original));
+  const prior = require("../../scripts/officialAutoscroll.cjs");
+  assert.equal(adapter.sha256(adapter.applyAllStages(prior.FILE, fs.readFileSync(path.join(INSTALLED, prior.FILE), "utf8"))), prior.PATCHED_HASH);
 });

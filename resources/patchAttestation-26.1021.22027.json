@@ -11,7 +11,8 @@
     "independent-drafts",
     "webview-recovery",
     "preload-index",
-    "autoscroll"
+    "autoscroll",
+    "composer-recovery"
   ],
   "files": {
     "package.json": "35198adfbce5e74047dfe4ce9a5b1e987e745415ef6e1cdc5a9fef2b759dc520",
@@ -25,6 +26,7 @@
     "webview/assets/composer-scope-f0dbf0e746b6.js": "79227c2014dd9a11ed1d2ab8ed6428723626245bea2791cc7b6af02b5d57507d",
     "webview/assets/bookmarked-thread-user-message-navigation-36a0dadf9f5d.js": "dc3e4c4bb1abf3b8b85ad2565e390eb4067a2f322becf038a1c9792ac03e3285",
     "webview/assets/app-initial-13f932cb2f13.js": "3753642aab9026fe1fdf361530612b6a3864ec7c084e68778c6f7f003e7c549e",
-    "webview/assets/local-conversation-thread-a37d62aef644.js": "670ec720c734332d68050319cc047bd853dd6ddbea0edeab10effe0db6d81ed4"
+    "webview/assets/local-conversation-thread-a37d62aef644.js": "670ec720c734332d68050319cc047bd853dd6ddbea0edeab10effe0db6d81ed4",
+    "webview/assets/thread-composer-content-lazy-720f6fb84454.js": "5bd7ab9f002c1425ccc20b566ccc58895d2334fcc7d9a62805460cdcefbcfdc3"
   }
 }

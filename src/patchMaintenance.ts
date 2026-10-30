@@ -90,6 +90,7 @@ const FEATURE_LABELS: Record<string, { russian: string; english: string }> = {
   'independent-drafts': { russian: 'Раздельные черновики вкладок', english: 'Independent tab drafts' },
   'webview-recovery': { russian: 'Защита чата от ошибок загрузки навигации', english: 'Chat navigation load recovery' },
   'preload-index': { russian: 'Ускорение открытия чата', english: 'Faster chat opening' },
+  'composer-recovery': { russian: 'Восстановление поля ввода', english: 'Composer recovery' },
   autoscroll: { russian: 'Автопрокрутка ответа', english: 'Latest-answer autoscroll' },
 };
 

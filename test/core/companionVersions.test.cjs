@@ -36,6 +36,7 @@ const FILES = [
 ];
 const RECOVERY_TARGET = 'webview/assets/bookmarked-thread-user-message-navigation.js';
 const FILES10 = [...FILES, RECOVERY_TARGET];
+const FILES13 = [...FILES10, 'webview/assets/preload.js', 'webview/assets/autoscroll.js', 'webview/assets/composer-recovery.js'];
 const STAGES = ['original', 'history', 'titles', 'workflow', 'drafts'];
 const FEATURES = [
   { id: 'project-history', stage: 'history', files: ['out/extension.js', 'webview/assets/one.js'] },
@@ -47,6 +48,8 @@ const FEATURES10 = [
   ...FEATURES,
   { id: 'webview-recovery', stage: 'drafts', files: [RECOVERY_TARGET] },
 ];
+
+const FEATURES13 = [...FEATURES10, { id: 'composer-recovery', stage: 'drafts', files: ['webview/assets/composer-recovery.js'] }];
 
 function sha256(data) {
   return createHash('sha256').update(data).digest('hex');
@@ -349,6 +352,58 @@ test('ten-file schema 3 engine uses chunks-v2, restores ten and no-ops without t
   });
 });
 
+test('thirteen-file schema 3 engine uses chunks-v5, restores thirteen and no-ops without touching the old nine backup', async () => {
+  const root = await newRoot();
+  const spec = buildSpec(NEW_VERSION, transformFor, FILES13, FEATURES13);
+  const manifest = buildManifest(spec);
+  const extDir = await writeExt(root, spec, 'original');
+
+  await withLocalAppData(root, async localAppData => {
+    const oldBackup = await createOldNineBackup(root, localAppData, NEW_VERSION);
+    const oldSnapshot = await snapshotDirectory(oldBackup);
+    await withManifests(new Map([[NEW_VERSION, manifest]]), async () => {
+      const engine = createEngine(spec);
+      const expectedBackup = path.join(localAppData, 'codex-companion', 'patches', NEW_VERSION, 'chunks-v5');
+
+      const before = await engine.check({ extDir });
+      assert.equal(before.files.length, 13);
+      assert.equal(before.state, 'original');
+      assert.equal(before.backup.path, expectedBackup);
+      assert.equal(before.backup.status, 'missing');
+      assert.equal(before.canInstall, true);
+      assert.deepEqual(before.features.map(feature => feature.id), FEATURES13.map(feature => feature.id));
+
+      const installed = await engine.install({ extDir });
+      assert.equal(installed.state, 'drafts');
+      assert.equal(installed.changed, true);
+      assert.equal(installed.backup.status, 'valid');
+      for (const rel of FILES13) {
+        assert.equal(sha256(await fs.readFile(filePath(extDir, rel))), manifest.stages.drafts[rel], rel);
+      }
+
+      const backupManifest = JSON.parse(await fs.readFile(path.join(expectedBackup, 'manifest.json'), 'utf8'));
+      assert.deepEqual(Object.keys(backupManifest.files).sort(), [...FILES13].sort());
+      assert.deepEqual(backupManifest.files, manifest.stages.original);
+      assert.deepEqual(await snapshotDirectory(oldBackup), oldSnapshot);
+
+      const installedAgain = await engine.install({ extDir });
+      assert.equal(installedAgain.changed, false);
+      assert.equal(installedAgain.state, 'drafts');
+      assert.deepEqual(await snapshotDirectory(oldBackup), oldSnapshot);
+
+      const restored = await engine.restore({ extDir });
+      assert.equal(restored.state, 'original');
+      for (const rel of FILES13) {
+        assert.equal(sha256(await fs.readFile(filePath(extDir, rel))), manifest.stages.original[rel], rel);
+      }
+      const restoredAgain = await engine.restore({ extDir });
+      assert.equal(restoredAgain.changed, false);
+      assert.equal(restoredAgain.state, 'original');
+      assert.deepEqual(await snapshotDirectory(oldBackup), oldSnapshot);
+    });
+  });
+});
+
 test('ten-file engine rejects corrupted or omitted new target and leaves chunks-v2 backup read-only', async () => {
   const root = await newRoot();
   const spec = buildSpec(NEW_VERSION, transformFor, FILES10, FEATURES10);
@@ -467,7 +522,7 @@ function loadRealNewSpec() {
   try {
     const value = require('../../scripts/official261021.cjs');
     if (!value || typeof value.SUPPORTED_VERSION !== 'string') return null;
-    if (!Array.isArray(value.FILES) || value.FILES.length !== 12) return null;
+    if (!Array.isArray(value.FILES) || value.FILES.length !== 13) return null;
     if (!value.ORIGINAL_HASHES || typeof value.ORIGINAL_HASHES !== 'object') return null;
     return value;
   } catch {
@@ -554,7 +609,7 @@ test('public facade routes the new official version to its own pinned engine', a
       'codex-companion',
       'patches',
       spec.SUPPORTED_VERSION,
-      'chunks-v4',
+      'chunks-v5',
     ),
   );
 });

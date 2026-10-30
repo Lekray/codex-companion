@@ -10,6 +10,7 @@ import {
   SCHEMA3_FILES10,
   SCHEMA3_FILES11,
   SCHEMA3_FILES12,
+  SCHEMA3_FILES13,
   SCHEMA3_OFFICIAL_VERSION,
   compatibilityFilesForVersion,
   inspectOfficialPatch,
@@ -275,11 +276,13 @@ test('schema 2 requires and verifies the additional composer bundle', async t =>
   assert.equal((await inspectOfficialPatch(directory,{...expected,schema:1})).code,'manifest');
 });
 
-test('schema 3 requires the exact twelve-target set including autoscroll', async t => {
+test('schema 3 requires the exact thirteen-target set including composer recovery', async t => {
+  const composerRecoveryFile = 'webview/assets/thread-composer-content-lazy-720f6fb84454.js';
+  assert.deepEqual([...SCHEMA3_FILES13], [...SCHEMA3_FILES12, composerRecoveryFile]);
   assert.deepEqual([...SCHEMA3_FILES12], [...SCHEMA3_FILES11, AUTOSCROLL_FILE]);
   assert.deepEqual([...SCHEMA3_FILES11], [...SCHEMA3_FILES10, PRELOAD_FILE]);
   assert.deepEqual([...SCHEMA3_FILES10], [...SCHEMA3_FILES, RECOVERY_FILE]);
-  assert.deepEqual(compatibilityFilesForVersion(SCHEMA3_OFFICIAL_VERSION), [...SCHEMA3_FILES12]);
+  assert.deepEqual(compatibilityFilesForVersion(SCHEMA3_OFFICIAL_VERSION), [...SCHEMA3_FILES13]);
 
   const files: Record<string, string> = {
     'package.json': JSON.stringify({
@@ -288,16 +291,16 @@ test('schema 3 requires the exact twelve-target set including autoscroll', async
       version: SCHEMA3_OFFICIAL_VERSION,
     }),
   };
-  for (const rel of SCHEMA3_FILES12) {
+  for (const rel of SCHEMA3_FILES13) {
     if (rel !== 'package.json') files[rel] = `official schema 3 bundle ${rel}`;
   }
   const directory = await fixture(t, files, SCHEMA3_FIXTURE_ROOT);
   const hashes: Record<string, string> = {};
-  for (const rel of SCHEMA3_FILES12) hashes[rel] = sha256(files[rel]!);
+  for (const rel of SCHEMA3_FILES13) hashes[rel] = sha256(files[rel]!);
   const valid: PatchAttestation = {
     schema: 3,
     officialVersion: SCHEMA3_OFFICIAL_VERSION,
-    features: ['preload-index', 'autoscroll'],
+    features: ['preload-index', 'autoscroll', 'composer-recovery'],
     files: hashes,
   };
   assert.equal((await inspectOfficialPatch(directory, valid)).code, 'ok');
@@ -316,6 +319,12 @@ test('schema 3 requires the exact twelve-target set including autoscroll', async
   });
   assert.equal(missingAutoscrollTarget.code, 'manifest');
   assert.ok(missingAutoscrollTarget.issues.some(issue => issue.includes(AUTOSCROLL_FILE)));
+
+  const missingComposer = { ...hashes };
+  delete missingComposer[composerRecoveryFile];
+  const rejectedComposer = await inspectOfficialPatch(directory, { ...valid, files: missingComposer });
+  assert.equal(rejectedComposer.code, 'manifest');
+  assert.ok(rejectedComposer.issues.some(issue => issue.includes(composerRecoveryFile)));
 
   const extraTarget = await inspectOfficialPatch(directory, {
     ...valid,

@@ -29,3 +29,4 @@ node_modules/@types/**
 !scripts/officialDraftTransform.cjs
 !scripts/officialPreloadIndex.cjs
 !scripts/officialAutoscroll.cjs
+!scripts/officialComposerRecovery.cjs
