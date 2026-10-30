@@ -1169,14 +1169,14 @@ test('schema2 invalid or wrong-target legacy backups are never overwritten', {
   assert.deepEqual(await snapshotTree(otherLegacy), otherLegacyBefore);
 });
 
-test('modern versions resolve the new chunks-v5 backup leaf only', () => {
+test('modern versions resolve the new chunks-v6 backup leaf only', () => {
   assert.ok(engine.supportedVersions().includes('26.1021.22027'));
   const modern = engine.defaultBackupPathForVersion('26.1021.22027');
   assert.equal(
     modern,
-    path.join(process.env.LOCALAPPDATA, 'codex-companion', 'patches', '26.1021.22027', 'chunks-v5'),
+    path.join(process.env.LOCALAPPDATA, 'codex-companion', 'patches', '26.1021.22027', 'chunks-v6'),
   );
-  assert.equal(path.basename(modern), 'chunks-v5');
+  assert.equal(path.basename(modern), 'chunks-v6');
   assert.notEqual(path.basename(modern), 'chunks-v4');
   assert.notEqual(path.basename(modern), 'chunks-v3');
   assert.notEqual(path.basename(modern), 'chunks-v2');

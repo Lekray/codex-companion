@@ -19,5 +19,6 @@
   "openChats": "Open Chats",
   "nextWaitingChat": "Focus Next Waiting Chat",
   "nextAttentionChat": "Focus Next Chat Needing Attention",
-  "openLegacyDraft": "Open Previous Shared Draft"
+  "openLegacyDraft": "Open Previous Shared Draft",
+  "rename": "Rename Window"
 }

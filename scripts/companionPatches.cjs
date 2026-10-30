@@ -104,7 +104,7 @@ function defaultBackupPathForVersion(version) {
   const specFiles = newSpec && Array.isArray(newSpec.FILES) ? newSpec.FILES.length : 0;
   const leaf = newSpec && normalized === newSpec.SUPPORTED_VERSION
     ? specFiles === 13
-      ? 'chunks-v5'
+      ? 'chunks-v6'
       : specFiles === 12
         ? 'chunks-v4'
         : specFiles === 11

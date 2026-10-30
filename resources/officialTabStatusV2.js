@@ -120,6 +120,7 @@ function __companionWorkflowBoundPanels(provider, threadId) {
   return out;
 }
 function __companionWorkflowApplyTitle(provider, panel) {
+  if (typeof __companionWindowNamesApply === "function" && __companionWindowNamesApply(provider, panel)) return true;
   var rec = __companionWorkflowRecord(provider, panel);
   if (rec == null || rec.__companionTitleActive !== true) return false;
   var base = __companionWorkflowString(rec.__companionTitleText);
@@ -159,7 +160,7 @@ function __companionWorkflowTab(runtime, provider, panel) {
     threadId: threadId,
     hostId: "local",
     route: active ? __companionWorkflowString(rec.__companionTitleRoute) : null,
-    title: active && __companionWorkflowString(rec.__companionTitleText) != null ? rec.__companionTitleText : "",
+    title: typeof __companionWindowNamesBase === "function" && __companionWindowNamesBase(provider, panel) != null ? __companionWindowNamesBase(provider, panel) : active && __companionWorkflowString(rec.__companionTitleText) != null ? rec.__companionTitleText : "",
     status: thread != null ? thread.status : "idle",
     turnId: thread != null ? thread.turnId : null,
     updatedAt: thread != null ? thread.updatedAt : Date.now()
@@ -1671,6 +1672,7 @@ function __companionWorkflowBindTitle(provider, webview) {
   __companionWorkflowPanelId(rec);
   if (rec.__companionTitleActive !== true) {
     rec.__companionWorkflowThreadId = null;
+    if (typeof __companionWindowNamesApply === "function") __companionWindowNamesApply(provider, panel);
     return false;
   }
   var threadId = __companionWorkflowString(rec.__companionTitleThreadId);

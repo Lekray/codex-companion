@@ -313,12 +313,13 @@ test("draft stage applies the pinned autoscroll transform only to its target", {
   assert.ok(drafts.includes("getLastScrollDistanceFromBottomPx"));
 });
 
-test("the prior twelve originals and final drafts hashes stay byte-identical", { skip: !hasInstalled }, () => {
+test("prior originals and webviews stay byte-identical; only host gains window names", { skip: !hasInstalled }, () => {
   assert.deepEqual(adapter.FILES.slice(0, 12), PRIOR_FILES);
   const manifest = adapter.buildManifest(INSTALLED);
   for (const rel of PRIOR_FILES) {
     assert.equal(manifest.stages.original[rel], PRIOR_ORIGINALS[rel], `original ${rel}`);
-    assert.equal(manifest.stages.drafts[rel], PRIOR_DRAFTS[rel], `drafts ${rel}`);
+    if (rel === adapter.HOST) assert.notEqual(manifest.stages.drafts[rel], PRIOR_DRAFTS[rel], "window-name host changed");
+    else assert.equal(manifest.stages.drafts[rel], PRIOR_DRAFTS[rel], `drafts ${rel}`);
   }
 });
 
@@ -381,7 +382,7 @@ test("thirteen-target engine rejects missing and mixed preload targets without w
     const fresh = await engine.check({ extDir });
     assert.equal(
       fresh.backup.path,
-      path.join(process.env.LOCALAPPDATA, "codex-companion", "patches", adapter.SUPPORTED_VERSION, "chunks-v5"),
+      path.join(process.env.LOCALAPPDATA, "codex-companion", "patches", adapter.SUPPORTED_VERSION, "chunks-v6"),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

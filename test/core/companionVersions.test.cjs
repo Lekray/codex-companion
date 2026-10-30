@@ -352,7 +352,7 @@ test('ten-file schema 3 engine uses chunks-v2, restores ten and no-ops without t
   });
 });
 
-test('thirteen-file schema 3 engine uses chunks-v5, restores thirteen and no-ops without touching the old nine backup', async () => {
+test('thirteen-file schema 3 engine uses chunks-v6, restores thirteen and no-ops without touching the old nine backup', async () => {
   const root = await newRoot();
   const spec = buildSpec(NEW_VERSION, transformFor, FILES13, FEATURES13);
   const manifest = buildManifest(spec);
@@ -363,7 +363,7 @@ test('thirteen-file schema 3 engine uses chunks-v5, restores thirteen and no-ops
     const oldSnapshot = await snapshotDirectory(oldBackup);
     await withManifests(new Map([[NEW_VERSION, manifest]]), async () => {
       const engine = createEngine(spec);
-      const expectedBackup = path.join(localAppData, 'codex-companion', 'patches', NEW_VERSION, 'chunks-v5');
+      const expectedBackup = path.join(localAppData, 'codex-companion', 'patches', NEW_VERSION, 'chunks-v6');
 
       const before = await engine.check({ extDir });
       assert.equal(before.files.length, 13);
@@ -609,7 +609,7 @@ test('public facade routes the new official version to its own pinned engine', a
       'codex-companion',
       'patches',
       spec.SUPPORTED_VERSION,
-      'chunks-v5',
+      'chunks-v6',
     ),
   );
 });

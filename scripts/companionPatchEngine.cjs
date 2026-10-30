@@ -461,7 +461,7 @@ function defaultBackupPath(manifest) {
   const base = path.join(localAppDataDir(), 'codex-companion', 'patches', manifest.officialVersion);
   if (spec) {
     const leaf = spec.files.length === 13
-      ? 'chunks-v5'
+      ? 'chunks-v6'
       : spec.files.length === 12
       ? 'chunks-v4'
       : spec.files.length === 11

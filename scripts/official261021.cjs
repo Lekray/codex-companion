@@ -176,6 +176,10 @@ function modelCoreSource() {
   });
 }
 
+function windowNamesSource() {
+  return rewriteAliases(resourceSource("officialWindowNames.js"), { je: "Be" });
+}
+
 function sha256(input) {
   const buf = typeof input === "string" ? Buffer.from(input, "utf8") : input;
   return crypto.createHash("sha256").update(buf).digest("hex");
@@ -608,7 +612,7 @@ function transformWorkflowHost(text) {
   t = replaceOnce(
     t,
     ANCHOR_STATUS_CORE,
-    ANCHOR_STATUS_CORE + "\n" + statusCoreSource(),
+    ANCHOR_STATUS_CORE + "\n" + statusCoreSource() + "\n" + windowNamesSource(),
     "extension.js:inject status runtime after title glue"
   );
   t = replaceOnce(
@@ -662,8 +666,20 @@ function transformWorkflowHost(text) {
   t = replaceOnce(
     t,
     ANCHOR_INSTALL,
-    "__companionWorkflowInstall($e,t)," + ANCHOR_INSTALL,
+    "__companionWorkflowInstall($e,t),__companionWindowNamesInstall($e,t)," + ANCHOR_INSTALL,
     "extension.js:capture provider and ExtensionContext"
+  );
+  t = replaceOnce(
+    t,
+    'this.editorPanels.set(r,{ready:!1,pendingMessages:[],initialRoute:i==null||o.path.startsWith("/local/")?o.path:`/local/${i}`})',
+    'this.editorPanels.set(r,{ready:!1,pendingMessages:[],initialRoute:i==null||o.path.startsWith("/local/")?o.path:`/local/${i}`,__companionDocumentUri:e.uri}),__companionWindowNamesRegister(this,r,e.uri)',
+    "extension.js:register exact custom editor document URI and panel name"
+  );
+  t = replaceOnce(
+    t,
+    'this.editorPanels.set(n,{ready:!1,pendingMessages:[],initialRoute:e?.initialRoute})',
+    'this.editorPanels.set(n,{ready:!1,pendingMessages:[],initialRoute:e?.initialRoute}),__companionWindowNamesRegister(this,n,null)',
+    "extension.js:initialize transient native panel name"
   );
   t = replaceOnce(
     t,

@@ -12,6 +12,7 @@ import { officialTabs, OFFICIAL_EDITOR, revealOfficialTab } from './officialTabs
 import { ProjectEnvironmentUi } from './projectEnvironment';
 import { ProjectHistoryUi } from './projectHistoryUi';
 import { TitleRefreshUi } from './titleRefresh';
+import { WindowNamesUi, RENAME_WINDOW_COMMAND } from './windowNamesUi';
 import { CHECK_COMPATIBILITY_COMMAND, PatchCompatibilityUi } from './patchCompatibilityUi';
 import { WorkflowUi, type OfficialOpenTab } from './workflowUi';
 import { OPEN_CHATS_COMMAND, OpenChatsUi } from './openChatsUi';
@@ -219,6 +220,21 @@ export function activate(context: vscode.ExtensionContext): void {
     onError: error => console.warn('[codex-companion] compatibility check failed', error),
   }, ru);
   workflowUi.setCompatibilityGate(() => patchCompatibility?.notificationsAllowed() ?? false);
+  const windowNamesUi = new WindowNamesUi({
+    allowed: async () => {
+      await workflowUi.retryBridge();
+      await patchCompatibility?.check(false, true);
+      return isLocal() && patchCompatibility?.status()?.runtimeReady === true;
+    },
+    getWindows: () => vscode.commands.executeCommand('chatgpt.companion.v1.getWindowNames'),
+    pick: items => vscode.window.showQuickPick(items, { placeHolder: tr('Выберите окно Codex', 'Select a Codex window') }),
+    input: value => vscode.window.showInputBox({
+      title: tr('Переименовать окно Codex', 'Rename Codex Window'),
+      prompt: tr('Название окна', 'Window name'), value, ignoreFocusOut: true,
+    }),
+    rename: input => vscode.commands.executeCommand('chatgpt.companion.v1.renameWindow', input),
+    warn: message => { void vscode.window.showWarningMessage(message); },
+  }, ru);
   const openChatsUi = new OpenChatsUi({
     allowed: () => isLocal() && patchCompatibility?.status()?.runtimeReady === true,
     getState: () => vscode.commands.executeCommand('chatgpt.companion.v1.getState'),
@@ -257,6 +273,7 @@ export function activate(context: vscode.ExtensionContext): void {
     patchCompatibility,
     openChatsUi,
     attentionUi,
+    vscode.commands.registerCommand(RENAME_WINDOW_COMMAND, () => windowNamesUi.rename()),
     vscode.commands.registerCommand(OPEN_CHATS_COMMAND, async () => {
       await workflowUi.retryBridge();
       await patchCompatibility?.check(false, true);
